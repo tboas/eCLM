@@ -12,6 +12,7 @@ module CNDriverMod
   use perf_mod                        , only : t_startf, t_stopf
   use clm_varctl                      , only : use_century_decomp, use_nitrif_denitrif, use_nguardrail
   use clm_varctl                      , only : use_crop
+  use clm_varctl                      , only : use_cfert  ! tboas: organic C fertilizer flag
   use CNSharedParamsMod               , only : use_fun
   use CNVegStateType                  , only : cnveg_state_type
   use CNVegCarbonStateType            , only : cnveg_carbonstate_type
@@ -105,7 +106,8 @@ contains
     use clm_varpar                        , only: nlevdecomp, ndecomp_cascade_transitions, ndecomp_pools
     use subgridAveMod                     , only: p2c, p2c_2d
     use CropType                          , only: crop_type
-    use CNNDynamicsMod                    , only: CNNDeposition,CNNFixation, CNNFert, CNSoyfix,CNFreeLivingFixation
+    use CNNDynamicsMod                    , only: CNNDeposition,CNNFixation, CNNFert, CNSoyfix,CNFreeLivingFixation, &
+                                                   CNCSoilFert  ! tboas: organic C fertilizer routing
     use CNMRespMod                        , only: CNMResp
     use CNFUNMod                          , only: CNFUNInit  !, CNFUN 
     use CNPhenologyMod                    , only: CNPhenology
@@ -282,6 +284,7 @@ contains
     if (use_crop) then
        call CNNFert(bounds, num_soilc,filter_soilc, &
             cnveg_nitrogenflux_inst, soilbiogeochem_nitrogenflux_inst)
+
 
        if (.not. use_fun) then  ! if FUN is active, then soy fixation handled by FUN
           call  CNSoyfix (bounds, num_soilc, filter_soilc, num_soilp, filter_soilp, &
@@ -469,6 +472,10 @@ contains
          phase=2)
 
     call t_stopf('CNPhenology')
+    ! tboas: route manure organic C into litter pools AFTER CNPhenology to avoid overwrite
+    if (use_cfert) then
+       call CNCSoilFert(bounds, num_soilc, filter_soilc, cnveg_carbonflux_inst)
+    end if
 
     !--------------------------------------------
     ! Growth respiration

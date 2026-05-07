@@ -15,7 +15,7 @@ module CNPhenologyMod
   use shr_sys_mod                     , only : shr_sys_flush
   use decompMod                       , only : bounds_type
   use clm_varpar                      , only : numpft, nlevdecomp_full
-  use clm_varctl                      , only : iulog, use_cndv
+  use clm_varctl                      , only : iulog, use_cndv, use_cfert, manure_CN_ratio  ! tboas
   use clm_varcon                      , only : tfrz
   use abortutils                      , only : endrun
   use CanopyStateType                 , only : canopystate_type
@@ -35,7 +35,6 @@ module CNPhenologyMod
   use GridcellType                    , only : grc                
   use PatchType                       , only : patch   
   use atm2lndType                     , only : atm2lnd_type             
-  use atm2lndType                     , only : atm2lnd_type
   !
   implicit none
   private
@@ -94,6 +93,9 @@ module CNPhenologyMod
   integer              :: jdayyrstart(inSH) ! julian day of start of year
 
   real(r8), private :: initial_seed_at_planting = 3._r8 ! Initial seed at planting
+
+  ! tboas: manure carbon parameters
+  real(r8), parameter :: manure_lignin_frac = 0.10_r8   ! lignin fraction of manure C for litter partitioning
 
   character(len=*), parameter, private :: sourcefile = &
        __FILE__
@@ -2174,6 +2176,7 @@ contains
     real(r8) dayspyr  ! days per year
     real(r8) crmcorn  ! comparitive relative maturity for corn
     real(r8) ndays_on ! number of days to fertilize
+    real(r8) :: manureC  ! tboas: organic carbon from manure based on fixed C:N ratio (gC/m2)
     !------------------------------------------------------------------------
 
     associate(                                                                   & 
@@ -2242,7 +2245,8 @@ contains
          rater             =>    crop_inst%rater_patch                  , & ! Output: [real(r8) (:)] loss of tolerance caused by respiration under snow
          fsurv             =>    crop_inst%fsurv_patch                  , & ! Output: [real(r8) (:)] winter wheat survival rate
          accfsurv          =>    crop_inst%accfsurv_patch               , & ! Output: [real(r8) (:)] accumulated winter wheat survival rate
-         countfsurv        =>    crop_inst%countfsurv_patch              & ! Output: [real(r8) (:)] numbers of accumulated winter wheat survival rate
+         countfsurv        =>    crop_inst%countfsurv_patch             , & ! Output: [real(r8) (:)] numbers of accumulated winter wheat survival rate
+         fertC             =>    cnveg_carbonflux_inst%fertC_patch        & ! Output: [real(r8) (:)] (gC/m2/s) organic C fertilizer from manure (tboas)
          )
 
       !variables for coldtolerance subroutine modified after Lu (2017) (tboas)
@@ -2747,6 +2751,13 @@ contains
                   else
                      fert(p) = 0._r8
                   end if
+                  ! tboas: compute organic C flux from manure using fixed C:N ratio
+                  if (use_cfert .and. ndays_on > 0._r8) then
+                     manureC  = manunitro(ivt(p)) * 1000._r8 * manure_CN_ratio
+                     fertC(p) = manureC / fert_counter(p)
+                  else
+                     fertC(p) = 0._r8
+                  end if
                else
                   ! this ensures no re-entry to onset of phase2
                   ! b/c onset_counter(p) = onset_counter(p) - dt
@@ -2814,8 +2825,14 @@ contains
 
                       if (fert_counter(p) <= 0._r8) then
                          fert(p) = 0._r8
+                         fertC(p) = 0._r8  ! tboas: zero organic C flux when application window ends
                       else ! continue same fert application every timestep
                          fert_counter(p) = fert_counter(p) - dtrad
+                         if (use_cfert) then  ! tboas: constant rate over full window
+                            ! Divide by full window duration, not decreasing counter
+                            manureC  = manunitro(ivt(p)) * 1000._r8 * manure_CN_ratio
+                            fertC(p) = manureC / (ndays_on * secspday)
+                         end if
                       end if
 
                  else   ! crop not live

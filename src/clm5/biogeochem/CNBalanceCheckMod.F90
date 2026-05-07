@@ -11,6 +11,7 @@ module CNBalanceCheckMod
   use decompMod                       , only : bounds_type
   use abortutils                      , only : endrun
   use clm_varctl                      , only : iulog, use_nitrif_denitrif
+  use clm_varctl                      , only : use_crop, use_cfert  ! tboas: use_cfert for organic C balance
   use clm_time_manager                , only : get_step_size
   use CNVegNitrogenFluxType           , only : cnveg_nitrogenflux_type
   use CNVegNitrogenStateType          , only : cnveg_nitrogenstate_type
@@ -20,6 +21,7 @@ module CNBalanceCheckMod
   use SoilBiogeochemCarbonfluxType    , only : soilbiogeochem_carbonflux_type
   use ColumnType                      , only : col                
   use GridcellType                    , only : grc
+  use PatchType                       , only : patch  ! tboas: needed for wtcol in fertC balance
   use CNSharedParamsMod               , only : use_fun
 
   !
@@ -148,6 +150,7 @@ contains
          col_fire_closs          =>    cnveg_carbonflux_inst%fire_closs_col             , & ! Input:  [real(r8) (:) ]  (gC/m2/s) total column-level fire C loss
          col_hrv_xsmrpool_to_atm =>    cnveg_carbonflux_inst%hrv_xsmrpool_to_atm_col    , & ! Input:  [real(r8) (:) ]  (gC/m2/s) excess MR pool harvest mortality 
          col_xsmrpool_to_atm     =>   cnveg_carbonflux_inst%xsmrpool_to_atm_col         , & ! Input:  [real(r8) (:) ]  (gC/m2/s) excess MR pool crop harvest loss to atm
+         fertC_patch             =>    cnveg_carbonflux_inst%fertC_patch                , & ! Input:  [real(r8) (:) ]  (gC/m2/s) organic C fertilizer from manure (tboas)
          som_c_leached           =>    soilbiogeochem_carbonflux_inst%som_c_leached_col , & ! Input:  [real(r8) (:) ]  (gC/m2/s) total SOM C loss from vertical transport 
 
          totcolc                 =>    cnveg_carbonstate_inst%totc_col                    & ! Input:  [real(r8) (:) ]  (gC/m2) total column carbon, incl veg and cpool
@@ -164,6 +167,12 @@ contains
          col_endcb(c) = totcolc(c)
          ! calculate total column-level inputs
          col_cinputs = gpp(c)
+         ! tboas: add manure C input — now correctly reaches litter pools via CNCSoilFert
+         if (use_crop .and. use_cfert) then
+            col_cinputs = col_cinputs + sum(fertC_patch(col%patchi(c):col%patchi(c)+col%npatches(c)-1) &
+                 * patch%wtcol(col%patchi(c):col%patchi(c)+col%npatches(c)-1))
+         end if
+
          
          ! calculate total column-level outputs
          ! er = ar + hr, col_fire_closs includes patch-level fire losses
@@ -208,6 +217,8 @@ contains
          write(iulog,*)'delta store              = ',col_endcb(c)-col_begcb(c)
          write(iulog,*)'--- Inputs ---'
          write(iulog,*)'gpp                      = ',gpp(c)*dt
+         write(iulog,*)'Corg_FERT (tboas)        = ',sum(fertC_patch(col%patchi(c):col%patchi(c)+col%npatches(c)-1) &
+              * patch%wtcol(col%patchi(c):col%patchi(c)+col%npatches(c)-1))*dt
          write(iulog,*)'--- Outputs ---'
          write(iulog,*)'er                       = ',er(c)*dt
          write(iulog,*)'col_fire_closs           = ',col_fire_closs(c)*dt

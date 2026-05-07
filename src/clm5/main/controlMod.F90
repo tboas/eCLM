@@ -258,9 +258,11 @@ contains
 
     namelist /clm_inparm/ &
          use_lch4, use_nitrif_denitrif, use_vertsoilc, use_extralakelayers, &
-         use_vichydro, use_century_decomp, use_cn, use_cndv, use_crop, use_fertilizer, use_ozone, &
+         use_vichydro, use_century_decomp, use_cn, use_cndv, use_crop, use_fertilizer, use_cfert, use_ozone, &
          use_grainproduct, use_snicar_frc, use_vancouver, use_mexicocity, use_noio, &
          use_nguardrail
+    namelist /cfert_inparm/ manure_CN_ratio, manure_fmet, manure_fcel, manure_flig, &
+         manure_injection_depth  ! tboas: manure C parameters
 
 
     ! ----------------------------------------------------------------------
@@ -310,6 +312,16 @@ contains
        else
           call endrun(msg='ERROR finding clm_inparm namelist'//errMsg(sourcefile, __LINE__))
        end if
+       ! tboas: read optional cfert_inparm namelist (default manure_CN_ratio=25 if absent)
+       rewind(unitn)
+       call shr_nl_find_group_name(unitn, 'cfert_inparm', status=ierr)
+       if (ierr == 0) then
+          read(unitn, cfert_inparm, iostat=ierr)
+          if (ierr /= 0) then
+             call endrun(msg='ERROR reading cfert_inparm namelist'//errMsg(sourcefile, __LINE__))
+          end if
+       end if
+       rewind(unitn)  ! tboas: rewind after cfert_inparm read
        call shr_nl_find_group_name(unitn, 'clm_nitrogen', status=ierr)
        if (ierr == 0) then
           read(unitn, clm_nitrogen, iostat=ierr)
@@ -587,7 +599,12 @@ contains
     call mpi_bcast (use_nguardrail, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_crop, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fertilizer, 1, MPI_LOGICAL, 0, mpicom, ier)
-    call mpi_bcast (use_grainproduct, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_cfert,       1, MPI_LOGICAL, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_CN_ratio,        1, MPI_REAL8, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_fmet,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_fcel,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_flig,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_injection_depth, 1, MPI_REAL8, 0, mpicom, ier)  ! tboas
     call mpi_bcast (use_ozone, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_snicar_frc, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_vancouver, 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -804,6 +821,15 @@ contains
     write(iulog,*) '    use_cndv = ', use_cndv
     write(iulog,*) '    use_crop = ', use_crop
     write(iulog,*) '    use_fertilizer = ', use_fertilizer
+    write(iulog,*) '    use_cfert      = ', use_cfert  ! tboas
+    write(iulog,*) '    manure_CN_ratio= ',        manure_CN_ratio         ! tboas
+    write(iulog,*) '    manure_fmet= ',            manure_fmet                ! tboas
+    write(iulog,*) '    manure_fcel= ',            manure_fcel                ! tboas
+    write(iulog,*) '    manure_flig= ',            manure_flig                ! tboas
+    write(iulog,*) '    manure_injection_depth= ', manure_injection_depth     ! tboas
+    if (abs(manure_fmet + manure_fcel + manure_flig - 1.0_r8) > 1.0e-6_r8) then
+       call endrun(msg='ERROR: manure_fmet + manure_fcel + manure_flig must equal 1.0')
+    end if
     write(iulog,*) '    use_grainproduct = ', use_grainproduct
     write(iulog,*) '    use_ozone = ', use_ozone
     write(iulog,*) '    use_snicar_frc = ', use_snicar_frc

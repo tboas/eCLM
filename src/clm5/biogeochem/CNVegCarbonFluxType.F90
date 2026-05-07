@@ -16,6 +16,7 @@ module CNVegCarbonFluxType
   use clm_varctl                         , only : use_cndv, use_c13, use_nitrif_denitrif, use_crop
   use clm_varctl                         , only : use_grainproduct
   use clm_varctl                         , only : iulog
+  use clm_varctl                         , only : use_cfert  ! tboas: namelist flag for organic C fertilizer
   use landunit_varcon                    , only : istsoil, istcrop, istdlak 
   use pftconMod                          , only : npcropmin, pftcon
   use LandunitType                       , only : lun                
@@ -280,6 +281,8 @@ module CNVegCarbonFluxType
      real(r8), pointer :: crop_seedc_to_leaf_patch                  (:)     ! (gC/m2/s) seed source to leaf, for crops
      real(r8), pointer :: crop_seedc_to_froot_patch                 (:)     ! (gC/m2/s) seed source to fine roots, for perennial crops (added by O.Dombrowski)
      real(r8), pointer :: crop_seedc_to_deadstem_patch              (:)     ! (gC/m2/s) seed source to deadstem, for perennial crops (added by O.Dombrowski)
+     ! tboas: organic carbon fertilizer flux from manure application
+     real(r8), pointer :: fertC_patch                               (:)     ! (gC/m2/s) organic C fertilizer from manure applied each timestep
 
      ! summary (diagnostic) flux variables, not involved in mass balance
      real(r8), pointer :: gpp_before_downreg_patch                  (:)     ! (gC/m2/s) gross primary production before down regulation
@@ -664,7 +667,9 @@ contains
     allocate(this%crop_seedc_to_leaf_patch          (begp:endp))                  ; this%crop_seedc_to_leaf_patch  (:)  =nan
     allocate(this%crop_seedc_to_froot_patch         (begp:endp))                  ; this%crop_seedc_to_froot_patch  (:)  =nan
     allocate(this%crop_seedc_to_deadstem_patch      (begp:endp))                  ; this%crop_seedc_to_deadstem_patch (:)  =nan 
-
+    ! tboas: always allocate fertC_patch so associate pointer in CNPhenologyMod is always valid
+    ! When use_cfert=False the array is zeroed and never written to litter pools
+    allocate(this%fertC_patch (begp:endp)) ; this%fertC_patch(:) = 0.0_r8
     allocate(this%cwdc_hr_col                       (begc:endc))                  ; this%cwdc_hr_col               (:)  =nan
     allocate(this%cwdc_loss_col                     (begc:endc))                  ; this%cwdc_loss_col             (:)  =nan
     allocate(this%litterc_loss_col                  (begc:endc))                  ; this%litterc_loss_col          (:)  =nan
@@ -844,6 +849,14 @@ contains
           call hist_addfld1d (fname='GRAINC_TO_SEED', units='gC/m^2/s', &
                avgflag='A', long_name='grain C to seed', &
                ptr_patch=this%grainc_to_seed_patch)
+       end if
+
+       ! tboas: history field for organic carbon fertilizer from manure
+       if (use_crop .and. use_cfert) then
+          this%fertC_patch(begp:endp) = 0.0_r8
+          call hist_addfld1d (fname='Corg_FERT', units='gC/m^2/s', &
+               avgflag='A', long_name='Organic carbon fertilizer applied from manure', &
+               ptr_patch=this%fertC_patch, default='inactive')
        end if
 
        this%litterc_loss_col(begc:endc) = spval
@@ -3577,6 +3590,14 @@ contains
             long_name='pruning storage C litterfall', units='gC/m2/s', &
             interpinic_flag='interp', readvar=readvar, data=this%prunec_storage_to_litter_patch)
 
+
+       ! tboas: restart for organic C fertilizer flux from manure
+       if (use_cfert) then
+          call restartvar(ncid=ncid, flag=flag, varname='fertC_patch', xtype=ncd_double, &
+               dim1name='pft', &
+               long_name='organic C fertilizer flux from manure', units='gC/m2/s', &
+               interpinic_flag='interp', readvar=readvar, data=this%fertC_patch)
+       end if
     end if
 
     call restartvar(ncid=ncid, flag=flag, varname='gpp_pepv', xtype=ncd_double,  &
@@ -3877,6 +3898,8 @@ contains
        this%crop_seedc_to_froot_patch(i)                 = value_patch
        this%crop_seedc_to_deadstem_patch(i)              = value_patch
        this%grainc_to_cropprodc_patch(i)                 = value_patch
+       ! tboas: zero fertC_patch for all patches
+       if (use_cfert) this%fertC_patch(i) = value_patch
     end do
 
     if ( use_crop )then
@@ -3895,6 +3918,8 @@ contains
           this%grainc_storage_to_xfer_patch(i)  = value_patch
           this%prunec_to_litter_patch(i)        = value_patch
           this%prunec_storage_to_litter_patch(i) = value_patch
+          ! tboas: zero fertC_patch in use_crop block
+          if (use_cfert) this%fertC_patch(i) = value_patch
        end do
     end if
 
