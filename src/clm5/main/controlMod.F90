@@ -262,7 +262,8 @@ contains
          use_grainproduct, use_snicar_frc, use_vancouver, use_mexicocity, use_noio, &
          use_nguardrail
     namelist /cfert_inparm/ manure_CN_ratio, manure_fmet, manure_fcel, manure_flig, &
-         manure_injection_depth  ! tboas: manure C parameters
+         manure_injection_depth, manure_freq_years, manure_apply_month, &
+         manure_apply_day  ! tboas: manure C parameters
 
 
     ! ----------------------------------------------------------------------
@@ -604,7 +605,10 @@ contains
     call mpi_bcast (manure_fmet,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_fcel,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_flig,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas
-    call mpi_bcast (manure_injection_depth, 1, MPI_REAL8, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_injection_depth, 1, MPI_REAL8,    0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_freq_years,      1, MPI_INTEGER, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_apply_month,     1, MPI_INTEGER, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_apply_day,       1, MPI_INTEGER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (use_ozone, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_snicar_frc, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_vancouver, 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -827,6 +831,9 @@ contains
     write(iulog,*) '    manure_fcel= ',            manure_fcel                ! tboas
     write(iulog,*) '    manure_flig= ',            manure_flig                ! tboas
     write(iulog,*) '    manure_injection_depth= ', manure_injection_depth     ! tboas
+    write(iulog,*) '    manure_freq_years= ',      manure_freq_years          ! tboas
+    write(iulog,*) '    manure_apply_month= ',     manure_apply_month         ! tboas
+    write(iulog,*) '    manure_apply_day= ',       manure_apply_day           ! tboas
     if (abs(manure_fmet + manure_fcel + manure_flig - 1.0_r8) > 1.0e-6_r8) then
        call endrun(msg='ERROR: manure_fmet + manure_fcel + manure_flig must equal 1.0')
     end if

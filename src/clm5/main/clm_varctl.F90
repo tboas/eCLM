@@ -245,6 +245,9 @@ logical, public :: use_cfert            = .false.
   real(r8), public :: manure_fcel          = 0.30_r8  ! tboas: cellulose litter fraction of manure C (cfert_inparm)
   real(r8), public :: manure_flig          = 0.10_r8  ! tboas: lignin litter fraction of manure C (cfert_inparm)
   real(r8), public :: manure_injection_depth = 0.0_r8 ! tboas: manure C injection depth [m] (cfert_inparm); 0=surface only
+  integer,  public :: manure_freq_years    = 1       ! tboas: apply manure every N years (cfert_inparm); 1=every year
+  integer,  public :: manure_apply_month   = 0       ! tboas: calendar month for manure application (cfert_inparm); 0=at planting
+  integer,  public :: manure_apply_day     = 1       ! tboas: calendar day for manure application (cfert_inparm)
 
 !----------------------------------------------------------
 ! To retrieve namelist

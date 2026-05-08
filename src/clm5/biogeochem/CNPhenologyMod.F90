@@ -15,7 +15,8 @@ module CNPhenologyMod
   use shr_sys_mod                     , only : shr_sys_flush
   use decompMod                       , only : bounds_type
   use clm_varpar                      , only : numpft, nlevdecomp_full
-  use clm_varctl                      , only : iulog, use_cndv, use_cfert, manure_CN_ratio  ! tboas
+  use clm_varctl                      , only : iulog, use_cndv, use_cfert, manure_CN_ratio, &
+       manure_freq_years, manure_apply_month, manure_apply_day  ! tboas
   use clm_varcon                      , only : tfrz
   use abortutils                      , only : endrun
   use CanopyStateType                 , only : canopystate_type
@@ -2751,12 +2752,23 @@ contains
                   else
                      fert(p) = 0._r8
                   end if
-                  ! tboas: compute organic C flux from manure using fixed C:N ratio
+                  ! tboas: apply manure C in single timestep at onset
+                  ! Controlled by manure_freq_years (every N years) and
+                  ! manure_apply_month (0=at planting, >0=fixed calendar date)
+                  fertC(p) = 0._r8
                   if (use_cfert .and. ndays_on > 0._r8) then
-                     manureC  = manunitro(ivt(p)) * 1000._r8 * manure_CN_ratio
-                     fertC(p) = manureC / fert_counter(p)
-                  else
-                     fertC(p) = 0._r8
+                     ! Check application frequency: apply only every manure_freq_years
+                     ! Use kyr modulo so year 2009->1, 2010->2 etc; fires when remainder=1
+                     if (manure_freq_years <= 1 .or. &
+                         mod(kyr, manure_freq_years) == 1) then
+                        ! Check timing: if manure_apply_month=0 apply at planting onset
+                        ! if manure_apply_month>0 only apply on that calendar date
+                        if (manure_apply_month == 0 .or. &
+                            (kmo == manure_apply_month .and. kda == manure_apply_day)) then
+                           manureC  = manunitro(ivt(p)) * 1000._r8 * manure_CN_ratio
+                           fertC(p) = manureC / dtrad  ! tboas: full amount in one timestep
+                        end if
+                     end if
                   end if
                else
                   ! this ensures no re-entry to onset of phase2
@@ -2826,13 +2838,9 @@ contains
                       if (fert_counter(p) <= 0._r8) then
                          fert(p) = 0._r8
                          fertC(p) = 0._r8  ! tboas: zero organic C flux when application window ends
-                      else ! continue same fert application every timestep
+                      else ! continue fertilizer N application — C already applied at onset
                          fert_counter(p) = fert_counter(p) - dtrad
-                         if (use_cfert) then  ! tboas: constant rate over full window
-                            ! Divide by full window duration, not decreasing counter
-                            manureC  = manunitro(ivt(p)) * 1000._r8 * manure_CN_ratio
-                            fertC(p) = manureC / (ndays_on * secspday)
-                         end if
+                         ! tboas: fertC zeroed by SetValues each timestep — no re-assignment needed
                       end if
 
                  else   ! crop not live

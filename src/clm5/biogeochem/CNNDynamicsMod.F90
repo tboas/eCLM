@@ -12,6 +12,8 @@ module CNNDynamicsMod
   use clm_varpar                       , only : nlevdecomp
   use clm_varctl                       , only : manure_fmet, manure_fcel, manure_flig, &
                                                 manure_injection_depth  ! tboas: cfert_inparm params
+  use clm_varctl                       , only : manure_freq_years, manure_apply_month, &
+                                                manure_apply_day  ! tboas: timing/frequency params
   use clm_varctl                       , only : use_nitrif_denitrif, use_vertsoilc, nfix_timeconst
   use clm_varctl                       , only : use_cfert, use_crop  ! tboas: use_cfert for organic C fert
   use subgridAveMod                    , only : p2c
