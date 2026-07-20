@@ -20,6 +20,7 @@ module dynSubgridDriverMod
   use dynpftFileMod                , only : dynpft_init, dynpft_interp
   use dyncropFileMod               , only : dyncrop_init, dyncrop_interp
   use dynHarvestMod                , only : dynHarvest_init, dynHarvest_interp, covercropping_update
+  use dynCovercropFileMod          , only : dyncovercrop_init, dyncovercrop_interp  ! tboas
   use dynLandunitAreaMod           , only : update_landunit_weights
   use subgridWeightsMod            , only : compute_higher_order_weights, set_subgrid_diagnostic_fields
   use reweightMod                  , only : reweight_wrapup
@@ -120,6 +121,7 @@ contains
     if (get_do_harvest()) then
        call dynHarvest_init(bounds_proc, harvest_filename=get_flanduse_timeseries())
     end if
+    if (use_covercropping) call dyncovercrop_init(bounds_proc)  ! tboas
 
     ! ------------------------------------------------------------------------
     ! Set initial subgrid weights for aspects that are read from file. This is relevant
@@ -133,6 +135,7 @@ contains
     if (get_do_transient_crops()) then
        call dyncrop_interp(bounds_proc, crop_inst)
     end if
+    if (use_covercropping) call dyncovercrop_interp(bounds_proc)  ! tboas
 
     ! (We don't bother calling dynHarvest_interp, because the harvest information isn't
     ! needed until the run loop. Harvest has nothing to do with subgrid weights, and in

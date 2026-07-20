@@ -218,6 +218,10 @@ contains
 
 
     ! FATES Flags
+    namelist /clm_inparm/ covercrop_paramfile    ! tboas: param file for covercrop PFTs
+    namelist /clm_inparm/ transient_landuse_file ! tboas: cover-crop rotation file
+    namelist /clm_inparm/ covercrop_paramfile    ! tboas
+    namelist /clm_inparm/ transient_landuse_file ! tboas
     namelist /clm_inparm/ fates_paramfile, use_fates,   &
           use_fates_spitfire, use_fates_logging,        &
           use_fates_planthydro, use_fates_ed_st3,       &
@@ -599,7 +603,9 @@ contains
     call mpi_bcast (use_cndv, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_nguardrail, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_crop, 1, MPI_LOGICAL, 0, mpicom, ier)
-    call mpi_bcast (use_covercropping, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_covercropping,      1, MPI_LOGICAL,   0, mpicom, ier)
+    call mpi_bcast (covercrop_paramfile,    len(covercrop_paramfile),    MPI_CHARACTER, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (transient_landuse_file, len(transient_landuse_file), MPI_CHARACTER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (use_fertilizer, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_cfert,       1, MPI_LOGICAL, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_CN_ratio,        1, MPI_REAL8, 0, mpicom, ier)  ! tboas

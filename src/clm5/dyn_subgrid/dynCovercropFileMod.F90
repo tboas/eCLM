@@ -1,0 +1,149 @@
+module dynCovercropFileMod
+
+#include "shr_assert.h"
+
+  !---------------------------------------------------------------------------
+  ! !DESCRIPTION:
+  ! Read the cover-crop rotation file and switch patch ivt after harvest.
+  !
+  ! Rotation file format:
+  !   dimensions: time, cft, lndgrid
+  !   integer YEAR(time)                  -- calendar year per time slice
+  !   real    PCT_CFT(time, cft, lndgrid) -- CFT fractions 0-100%
+  !
+  ! After harvest of any cash crop, covercrop_switch_ivt finds the dominant
+  ! CFT in the next year slice for this gridcell and switches ivt(p).
+  ! Works identically for point and regional/global domains.
+  !
+  ! Backward compatibility:
+  !   use_covercropping = .false. -> never called, zero overhead
+  !   use_covercropping = .true.  -> transient_landuse_file must be set
+  ! tboas
+  !
+  ! !USES:
+  use shr_kind_mod            , only : r8 => shr_kind_r8
+  use shr_log_mod             , only : errMsg => shr_log_errMsg
+  use decompMod               , only : bounds_type, BOUNDS_LEVEL_PROC
+  use dynFileMod              , only : dyn_file_type
+  use clm_varctl              , only : iulog, use_covercropping, transient_landuse_file
+  use clm_varcon              , only : grlnd
+  use clm_varpar              , only : cft_size, cft_lb
+  use abortutils              , only : endrun
+  use spmdMod                 , only : masterproc
+  use PatchType               , only : patch
+  use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2
+  use clm_varctl              , only : use_grainproduct
+  !
+  implicit none
+  private
+  save
+
+  public :: dyncovercrop_init
+  public :: dyncovercrop_interp
+  public :: covercrop_switch_ivt
+
+  !---------------------------------------------------------------------------
+  type(dyn_file_type), target :: dyncovercrop_file
+  real(r8), allocatable :: pct_cft_cur (:,:)  ! (begg:endg, cft_size)
+  real(r8), allocatable :: pct_cft_next(:,:)  ! (begg:endg, cft_size)
+
+  character(len=*), parameter, private :: sourcefile = __FILE__
+
+contains
+
+  !-----------------------------------------------------------------------
+  subroutine dyncovercrop_init(bounds)
+    use dynTimeInfoMod        , only : YEAR_POSITION_START_OF_TIMESTEP
+    use dynVarTimeUninterpMod , only : dyn_var_time_uninterp_type
+    use ncdio_pio             , only : check_dim
+    type(bounds_type), intent(in) :: bounds
+    type(dyn_var_time_uninterp_type) :: wtcft_obj
+    integer :: num_points, pct_cft_shape(2)
+    character(len=*), parameter :: subname = "dyncovercrop_init"
+    !-----------------------------------------------------------------------
+    SHR_ASSERT_ALL(bounds%level == BOUNDS_LEVEL_PROC, &
+         subname // ": argument must be PROC-level bounds")
+    if (.not. use_covercropping) return
+    if (trim(transient_landuse_file) == "" .or. &
+        trim(transient_landuse_file) == " ") then
+       call endrun(msg=" ERROR: use_covercropping=.true. but transient_landuse_file" // &
+            " is not set in lnd_in." // errMsg(sourcefile, __LINE__))
+    end if
+    if (masterproc) write(iulog,*) &
+         "dyncovercrop_init: opening ", trim(transient_landuse_file)
+    dyncovercrop_file = dyn_file_type( &
+         trim(transient_landuse_file), YEAR_POSITION_START_OF_TIMESTEP)
+    call check_dim(dyncovercrop_file, "cft", cft_size)
+    num_points    = bounds%endg - bounds%begg + 1
+    pct_cft_shape = [num_points, cft_size]
+    allocate(pct_cft_cur (bounds%begg:bounds%endg, cft_size))
+    allocate(pct_cft_next(bounds%begg:bounds%endg, cft_size))
+    pct_cft_cur  = 0._r8
+    pct_cft_next = 0._r8
+    call dyncovercrop_interp(bounds)
+  end subroutine dyncovercrop_init
+
+  !-----------------------------------------------------------------------
+  subroutine dyncovercrop_interp(bounds)
+    use dynVarTimeUninterpMod , only : dyn_var_time_uninterp_type
+    type(bounds_type), intent(in) :: bounds
+    type(dyn_var_time_uninterp_type) :: wtcft_obj
+    integer :: num_points, pct_cft_shape(2)
+    !-----------------------------------------------------------------------
+    if (.not. use_covercropping)       return
+    if (.not. allocated(pct_cft_cur))  return
+    call dyncovercrop_file%time_info%set_current_year()
+    num_points    = bounds%endg - bounds%begg + 1
+    pct_cft_shape = [num_points, cft_size]
+    wtcft_obj = dyn_var_time_uninterp_type( &
+         dyn_file              = dyncovercrop_file, &
+         varname               = "PCT_CFT", &
+         dim1name              = grlnd, &
+         conversion_factor     = 100._r8, &
+         do_check_sums_equal_1 = .false., &
+         data_shape            = pct_cft_shape)
+    call wtcft_obj%get_current_data(pct_cft_cur(bounds%begg:bounds%endg, :))
+    call wtcft_obj%get_shifted_data( &
+         pct_cft_next(bounds%begg:bounds%endg, :), offset=1)
+  end subroutine dyncovercrop_interp
+
+  !-----------------------------------------------------------------------
+  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst)
+    use CropType         , only : crop_type
+    use CNVegStateType   , only : cnveg_state_type
+    integer               , intent(in)    :: p
+    type(crop_type)       , intent(inout) :: crop_inst
+    type(cnveg_state_type), intent(inout) :: cnveg_state_inst
+    integer  :: g, cft, best_cft, new_ivt
+    real(r8) :: best_pct
+    integer, parameter :: NOT_Planted = 999
+    !-----------------------------------------------------------------------
+    if (.not. use_covercropping)       return
+    if (.not. allocated(pct_cft_next)) return
+    g = patch%gridcell(p)
+    ! Find dominant CFT in next-year slice for this gridcell
+    best_cft = 1
+    best_pct = -1._r8
+    do cft = 1, cft_size
+       if (pct_cft_next(g, cft) > best_pct) then
+          best_pct = pct_cft_next(g, cft)
+          best_cft = cft
+       end if
+    end do
+    ! Convert CFT array index to global PFT index
+    ! cft_lb = first crop PFT index = natpft_ub + 1
+    new_ivt = cft_lb + best_cft - 1
+    if (new_ivt == patch%itype(p)) return
+    patch%itype(p)                       = new_ivt
+    crop_inst%croplive_patch(p)          = .false.
+    crop_inst%cropplant_patch(p)         = .false.
+    cnveg_state_inst%idop_patch(p)       = NOT_Planted
+    ! Suppress grain product accounting for cover crops
+    if (new_ivt == ncovercrop_1 .or. new_ivt == ncovercrop_2) then
+       use_grainproduct = .false.
+    else
+       use_grainproduct = .true.
+    end if
+  end subroutine covercrop_switch_ivt
+
+end module dynCovercropFileMod

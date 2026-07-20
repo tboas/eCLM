@@ -9,7 +9,7 @@ module pftconMod
   use shr_kind_mod, only : r8 => shr_kind_r8
   use abortutils  , only : endrun
   use clm_varpar  , only : mxpft, numrad, ivis, inir, cft_lb, cft_ub
-  use clm_varctl  , only : iulog, use_cndv, use_vertsoilc, use_crop, use_covercropping
+  use clm_varctl  , only : iulog, use_cndv, use_vertsoilc, use_crop, use_covercropping, covercrop_paramfile
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -1042,13 +1042,32 @@ contains
     call ncd_io('max_SH_planting_date', this%mxSHplantdate, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
 
-!Cover crop flag read-in
-
+!Cover crop flag read-in --- tboas
+    ! Default: zero array - backward compatible with standard 79-PFT param file.
+    ! If use_covercropping=.true.: open covercrop_paramfile separately and read
+    ! covercrop flag from there. Standard paramfile is never touched.
+    this%covercrop(:) = 0._r8
     if (use_covercropping) then
-       call ncd_io('covercrop', this%covercrop, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in cover crop flag'//errMsg(sourcefile, __LINE__))
-    else
-       this%covercrop(:) = 0._r8
+       if (trim(covercrop_paramfile) == '' .or. &
+           trim(covercrop_paramfile) == ' ') then
+          call endrun(msg=' ERROR: use_covercropping=.true. but covercrop_paramfile' // &
+               ' is not set in lnd_in. Add: covercrop_paramfile = /path/to/file.nc' // &
+               errMsg(sourcefile, __LINE__))
+       end if
+       if (masterproc) write(iulog,*) &
+            'pftconMod: reading covercrop PFT params from: ', trim(covercrop_paramfile)
+       block
+         type(file_desc_t) :: ncid_cc
+         character(len=256) :: locfn_cc
+         call getfil(covercrop_paramfile, locfn_cc, 0)
+         call ncd_pio_openfile(ncid_cc, trim(locfn_cc), 0)
+         call ncd_io('covercrop', this%covercrop, 'read', ncid_cc, readvar=readv)
+         if (.not. readv) call endrun( &
+              msg=' ERROR: variable covercrop not found in covercrop_paramfile' // &
+              errMsg(sourcefile, __LINE__))
+         if (masterproc) write(iulog,*) 'pftconMod: covercrop flag read OK'
+         call ncd_pio_closefile(ncid_cc)
+       end block
     end if
 
     !

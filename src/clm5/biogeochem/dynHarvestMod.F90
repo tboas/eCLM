@@ -19,9 +19,10 @@ module dynHarvestMod
   use CNVegNitrogenStateType  , only : cnveg_nitrogenstate_type
   use CNVegNitrogenFluxType   , only : cnveg_nitrogenflux_type
   use SoilBiogeochemStateType , only : soilbiogeochem_state_type
-  use pftconMod               , only : pftcon, nswheat, nsugarbeet, ncovercrop_1, ncovercrop_2
+  use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2
   use clm_varcon              , only : grlnd
   use clm_varctl              , only : use_covercropping, use_grainproduct
+  use dynCovercropFileMod     , only : covercrop_switch_ivt  ! tboas
   use ColumnType              , only : col                
   use PatchType               , only : patch                
   use CropType                , only : crop_type
@@ -206,9 +207,10 @@ contains
   subroutine covercropping_update_patch(p, crop_inst, cnveg_state_inst)
     !
     ! !DESCRIPTION:
-    ! Rotate between cash crops and cover-crop PFTs after harvest. This is the logic
-    ! that used to live in CNPhenology but is now invoked from the transient land-use
-    ! path to keep the default behavior compatible with older parameter files.
+    ! After harvest of any cash crop, switch the patch ivt to the next crop
+    ! defined in the cover-crop rotation file (transient_landuse_file).
+    ! Delegates to covercrop_switch_ivt in dynCovercropFileMod.
+    ! tboas: file-driven rotation, no hardcoded sequences.
     !
     ! !ARGUMENTS:
     integer                , intent(in)    :: p
@@ -217,53 +219,22 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer, parameter :: NOT_Planted = 999
-    integer :: cashcrop1
-    integer :: cashcrop2
-    integer :: covercrop1
-    integer :: covercrop2
     !------------------------------------------------------------------------
 
     associate(                                             &
          ivt               =>    patch%itype                     , & ! Input: [integer (:) ] patch vegetation type
-         idop              =>    cnveg_state_inst%idop_patch     , & ! Output: [integer (:) ] date of planting
-         croplive          =>    crop_inst%croplive_patch        , & ! Output: [logical (:) ] flag, true if planted, not harvested
-         cropplant         =>    crop_inst%cropplant_patch       , & ! Output: [logical (:) ] flag, true if crop may be planted
-         harvdate          =>    crop_inst%harvdate_patch       , & ! Output: [integer (:) ] harvest date
+         harvdate          =>    crop_inst%harvdate_patch        , & ! Input:  [integer (:) ] harvest date
          covercrop         =>    pftcon%covercrop                  & ! Input: cover-crop flag
          )
 
+      ! Only act on patches flagged as cover-crop rotation members
       if (covercrop(ivt(p)) /= 1) return
 
-      cashcrop1 = nswheat
-      cashcrop2 = nsugarbeet
-      covercrop1 = ncovercrop_1
-      covercrop2 = ncovercrop_2
+      ! Only switch after harvest has occurred this season
+      if (harvdate(p) <= 0) return
 
-      if (harvdate(p) >= 150._r8 .and. ivt(p) == cashcrop1) then
-         ivt(p) = covercrop1
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p) = NOT_Planted
-         use_grainproduct = .false.
-      else if (harvdate(p) <= 170._r8 .and. ivt(p) == covercrop1) then
-         ivt(p) = cashcrop2
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p) = NOT_Planted
-         use_grainproduct = .true.
-      else if (harvdate(p) >= 150._r8 .and. ivt(p) == cashcrop2) then
-         ivt(p) = covercrop2
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p) = NOT_Planted
-         use_grainproduct = .false.
-      else if (harvdate(p) <= 170._r8 .and. ivt(p) == covercrop2) then
-         ivt(p) = cashcrop1
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p) = NOT_Planted
-         use_grainproduct = .true.
-      end if
+      ! Delegate to file-driven rotation
+      call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst)
 
     end associate
 
