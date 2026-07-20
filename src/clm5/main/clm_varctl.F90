@@ -83,8 +83,6 @@ logical, public :: use_crop             = .false.
 logical, public :: use_covercropping    = .false.
 character(len=256), public :: transient_landuse_file = ' '  ! tboas
 character(len=fname_len), public :: covercrop_paramfile = ' '  ! tboas
-character(len=256), public :: transient_landuse_file = ' '  ! tboas: cover-crop rotation file
-character(len=fname_len), public :: covercrop_paramfile = ' '  ! tboas: param file with covercrop_1/2 PFTs
 logical, public :: create_crop_landunit = .false.
 logical, public :: irrigate             = .false.
 

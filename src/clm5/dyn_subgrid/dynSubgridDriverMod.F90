@@ -21,6 +21,7 @@ module dynSubgridDriverMod
   use dyncropFileMod               , only : dyncrop_init, dyncrop_interp
   use dynHarvestMod                , only : dynHarvest_init, dynHarvest_interp, covercropping_update
   use dynCovercropFileMod          , only : dyncovercrop_init, dyncovercrop_interp  ! tboas
+  use clm_varctl                   , only : use_covercropping  ! tboas
   use dynLandunitAreaMod           , only : update_landunit_weights
   use subgridWeightsMod            , only : compute_higher_order_weights, set_subgrid_diagnostic_fields
   use reweightMod                  , only : reweight_wrapup
