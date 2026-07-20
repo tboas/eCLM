@@ -80,6 +80,7 @@ character(len=fname_len), public :: finidat_interp_dest   = ''
 ! Crop & Irrigation logic
 !----------------------------------------------------------
 logical, public :: use_crop             = .false.
+logical, public :: use_covercropping    = .false.
 logical, public :: create_crop_landunit = .false.
 logical, public :: irrigate             = .false.
 

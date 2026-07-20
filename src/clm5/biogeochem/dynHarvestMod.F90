@@ -19,10 +19,13 @@ module dynHarvestMod
   use CNVegNitrogenStateType  , only : cnveg_nitrogenstate_type
   use CNVegNitrogenFluxType   , only : cnveg_nitrogenflux_type
   use SoilBiogeochemStateType , only : soilbiogeochem_state_type
-  use pftconMod               , only : pftcon
+  use pftconMod               , only : pftcon, nswheat, nsugarbeet, ncovercrop_1, ncovercrop_2
   use clm_varcon              , only : grlnd
+  use clm_varctl              , only : use_covercropping, use_grainproduct
   use ColumnType              , only : col                
   use PatchType               , only : patch                
+  use CropType                , only : crop_type
+  use CNVegStateType          , only : cnveg_state_type
   !
   ! !PUBLIC MEMBER FUNCTIONS:
   implicit none
@@ -30,6 +33,8 @@ module dynHarvestMod
   !
   public :: dynHarvest_init    ! initialize data structures for harvest information
   public :: dynHarvest_interp  ! get harvest data for current time step, if needed
+  public :: covercropping_update
+  public :: covercropping_update_patch
   public :: CNHarvest          ! harvest mortality routine for CN code
   !
   ! !PRIVATE MEMBER FUNCTIONS:
@@ -172,6 +177,97 @@ contains
 
   end subroutine dynHarvest_interp
 
+
+  !-----------------------------------------------------------------------
+  subroutine covercropping_update(bounds, crop_inst, cnveg_state_inst)
+    !
+    ! !DESCRIPTION:
+    ! Apply the cover-crop rotation after the transient land-use / harvest update when
+    ! the optional cover-cropping switch is enabled.
+    !
+    ! !ARGUMENTS:
+    type(bounds_type), intent(in) :: bounds
+    type(crop_type)  , intent(inout) :: crop_inst
+    type(cnveg_state_type), intent(inout) :: cnveg_state_inst
+    !
+    ! !LOCAL VARIABLES:
+    integer :: p
+    !------------------------------------------------------------------------
+
+    if (.not. use_covercropping) return
+
+    do p = bounds%begp, bounds%endp
+       call covercropping_update_patch(p, crop_inst, cnveg_state_inst)
+    end do
+
+  end subroutine covercropping_update
+
+  !-----------------------------------------------------------------------
+  subroutine covercropping_update_patch(p, crop_inst, cnveg_state_inst)
+    !
+    ! !DESCRIPTION:
+    ! Rotate between cash crops and cover-crop PFTs after harvest. This is the logic
+    ! that used to live in CNPhenology but is now invoked from the transient land-use
+    ! path to keep the default behavior compatible with older parameter files.
+    !
+    ! !ARGUMENTS:
+    integer                , intent(in)    :: p
+    type(crop_type)        , intent(inout) :: crop_inst
+    type(cnveg_state_type) , intent(inout) :: cnveg_state_inst
+    !
+    ! !LOCAL VARIABLES:
+    integer, parameter :: NOT_Planted = 999
+    integer :: cashcrop1
+    integer :: cashcrop2
+    integer :: covercrop1
+    integer :: covercrop2
+    !------------------------------------------------------------------------
+
+    associate(                                             &
+         ivt               =>    patch%itype                     , & ! Input: [integer (:) ] patch vegetation type
+         idop              =>    cnveg_state_inst%idop_patch     , & ! Output: [integer (:) ] date of planting
+         croplive          =>    crop_inst%croplive_patch        , & ! Output: [logical (:) ] flag, true if planted, not harvested
+         cropplant         =>    crop_inst%cropplant_patch       , & ! Output: [logical (:) ] flag, true if crop may be planted
+         harvdate          =>    crop_inst%harvdate_patch       , & ! Output: [integer (:) ] harvest date
+         covercrop         =>    pftcon%covercrop                  & ! Input: cover-crop flag
+         )
+
+      if (covercrop(ivt(p)) /= 1) return
+
+      cashcrop1 = nswheat
+      cashcrop2 = nsugarbeet
+      covercrop1 = ncovercrop_1
+      covercrop2 = ncovercrop_2
+
+      if (harvdate(p) >= 150._r8 .and. ivt(p) == cashcrop1) then
+         ivt(p) = covercrop1
+         croplive(p) = .false.
+         cropplant(p) = .false.
+         idop(p) = NOT_Planted
+         use_grainproduct = .false.
+      else if (harvdate(p) <= 170._r8 .and. ivt(p) == covercrop1) then
+         ivt(p) = cashcrop2
+         croplive(p) = .false.
+         cropplant(p) = .false.
+         idop(p) = NOT_Planted
+         use_grainproduct = .true.
+      else if (harvdate(p) >= 150._r8 .and. ivt(p) == cashcrop2) then
+         ivt(p) = covercrop2
+         croplive(p) = .false.
+         cropplant(p) = .false.
+         idop(p) = NOT_Planted
+         use_grainproduct = .false.
+      else if (harvdate(p) <= 170._r8 .and. ivt(p) == covercrop2) then
+         ivt(p) = cashcrop1
+         croplive(p) = .false.
+         cropplant(p) = .false.
+         idop(p) = NOT_Planted
+         use_grainproduct = .true.
+      end if
+
+    end associate
+
+  end subroutine covercropping_update_patch
 
   !-----------------------------------------------------------------------
   subroutine CNHarvest (num_soilc, filter_soilc, num_soilp, filter_soilp, &

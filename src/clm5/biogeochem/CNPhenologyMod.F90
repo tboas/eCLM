@@ -2944,89 +2944,19 @@ contains
 
     !
     ! !DESCRIPTION:
-    ! !Covercropping subroutine allows second onset of phenology for cover crop after harvest of cash crops and immediate rotation to winter cash crop following a summer cash crop
-    ! * * * only call when covercrop(ivt(p)) == 1 * * *
+    ! Wrapper to the transient land-use cover-crop rotation routine so the phenology
+    ! code stays backward-compatible while the actual logic lives in the dynamic land-use
+    ! module.
     !
-    !
-
     ! !USES:
-    use pftconMod        , only : ntmp_corn, nswheat,nwwheat,ntmp_soybean,nbarley, nwbarley, nrye, nwrye, ncassava, napple, ncocoa,ncoffee,ncotton,ndatepalm, nfoddergrass, ngrapes, ngroundnuts, nmillet,noilpalm,npotatoes,npulses, nrapeseed, nrice, nsorghum, nsugarbeet,nsunflower,nmiscanthus,nswitchgrass, nc3crop, ncovercrop_1, ncovercrop_2
-    use pftconMod        , only : nirrig_tmp_corn,nirrig_swheat,nirrig_wwheat,nirrig_tmp_soybean, nirrig_barley, nirrig_wbarley,nirrig_rye,nirrig_wrye,nirrig_cassava, nirrig_apple, nirrig_cocoa,nirrig_coffee,nirrig_cotton,nirrig_datepalm, nirrig_foddergrass,nirrig_grapes,nirrig_groundnuts,nirrig_millet, nirrig_oilpalm, nirrig_potatoes,nirrig_pulses,nirrig_rapeseed,nirrig_rice, nirrig_sorghum,nirrig_sugarbeet,nirrig_sunflower,nirrig_miscanthus, nirrig_switchgrass,nc3irrig
-    use pftconMod        , only : ntrp_corn, nsugarcane, ncotton, nrice
-    use pftconMod        , only : nirrig_trp_corn, nirrig_sugarcane
-    use pftconMod        , only : nirrig_cotton, nirrig_rice
-    use clm_varctl       , only : use_grainproduct
-    use clm_time_manager, only:  get_curr_calday
+    use dynHarvestMod, only : covercropping_update_patch
 
     ! !ARGUMENTS:
     integer                , intent(in)    :: p    ! PATCH index running over
     type(crop_type)        , intent(inout) :: crop_inst
     type(cnveg_state_type) , intent(inout) :: cnveg_state_inst
 
-    !
-    ! LOCAL VARAIBLES:
-    integer jday      ! julian day of the year
-    integer cashcrop1 ! first cash crop in rotation cycle
-    integer cashcrop2 ! second cash crop in rotation cycle
-    integer covercrop1 ! first cover crop in rotation cycle
-    integer covercrop2 ! second cover crop in rotation cycle
-    !! list can be extended
-
-    !------------------------------------------------------------------------
-
-    associate(                                             &
-         ivt               =>    patch%itype                     ,& ! Input:[integer  (:) ]  patch vegetation type
-         cphase            =>    crop_inst%cphase_patch          ,& ! Output:[real(r8) (:)]   phenology phase
-         idop              =>    cnveg_state_inst%idop_patch     ,& ! Output:[integer  (:) ]  date of planting
-         croplive          =>    crop_inst%croplive_patch        ,& ! Output:[logical  (:) ]  Flag, true if planted, not harvested
-         cropplant         =>    crop_inst%cropplant_patch       ,& ! Output:[logical  (:) ]  Flag, true if crop may be planted
-         harvdate          =>    crop_inst%harvdate_patch         & ! Output:[integer  (:) ]  harvest date
-            )
-
-      jday    = get_curr_calday()
-      ! add read in function from .txt file for flexible variable setting
-      ! define crop rotation: variable assignment can be changes and list can be extended
-      cashcrop1 = nswheat
-      cashcrop2 = nsugarbeet
-      covercrop1 = ncovercrop_1
-      covercrop2 = ncovercrop_2
-
-      if (harvdate(p) >= 150._r8 .and. ivt(p) == cashcrop1) then
-         ivt(p)= covercrop1
-         ! write (iulog,*)  'cft changed to covercrop'
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p)      = NOT_Planted
-         use_grainproduct = .false.
-
-      else if (harvdate(p) <= 170._r8 .and. ivt(p) == covercrop1) then
-         ivt(p)= cashcrop2
-         ! write (iulog,*)  'cft changed to cashcrop2'
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p)      = NOT_Planted
-         use_grainproduct = .true.
-
-      else if (harvdate(p) >= 150._r8 .and. ivt(p) == cashcrop2) then
-         ivt(p)= covercrop2
-         ! write (iulog,*)  'cft changed to covercrop2'
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p)      = NOT_Planted
-         use_grainproduct = .false.
-
-      else if (harvdate(p) <= 170._r8 .and. ivt(p) == covercrop2) then
-         ivt(p)= cashcrop1
-         ! write (iulog,*)  'cft changed back to cashcrop1 - beginning of next
-         ! rotatoin cycle'
-         croplive(p) = .false.
-         cropplant(p) = .false.
-         idop(p)      = NOT_Planted
-         use_grainproduct = .true.
-
-      end if
-
-    end associate
+    call covercropping_update_patch(p, crop_inst, cnveg_state_inst)
 
   end subroutine covercropping
 

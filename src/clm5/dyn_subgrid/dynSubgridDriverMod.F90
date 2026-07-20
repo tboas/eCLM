@@ -19,7 +19,7 @@ module dynSubgridDriverMod
   use dynColumnStateUpdaterMod     , only : column_state_updater_type
   use dynpftFileMod                , only : dynpft_init, dynpft_interp
   use dyncropFileMod               , only : dyncrop_init, dyncrop_interp
-  use dynHarvestMod                , only : dynHarvest_init, dynHarvest_interp
+  use dynHarvestMod                , only : dynHarvest_init, dynHarvest_interp, covercropping_update
   use dynLandunitAreaMod           , only : update_landunit_weights
   use subgridWeightsMod            , only : compute_higher_order_weights, set_subgrid_diagnostic_fields
   use reweightMod                  , only : reweight_wrapup
@@ -172,7 +172,7 @@ contains
     ! OUTSIDE any loops over clumps in the driver.
     !
     ! !USES:
-    use clm_varctl           , only : use_cn, use_fates
+    use clm_varctl           , only : use_cn, use_fates, use_covercropping
     use dynInitColumnsMod    , only : initialize_new_columns
     use dynConsBiogeophysMod , only : dyn_hwcontent_init, dyn_hwcontent_final
     use dynEDMod             , only : dyn_ED
@@ -246,6 +246,10 @@ contains
 
     if (get_do_harvest()) then
        call dynHarvest_interp(bounds_proc)
+    end if
+
+    if (use_covercropping) then
+       call covercropping_update(bounds_proc, crop_inst, bgc_vegetation_inst%cnveg_state_inst)
     end if
 
     ! ==========================================================================

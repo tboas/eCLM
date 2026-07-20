@@ -9,7 +9,7 @@ module pftconMod
   use shr_kind_mod, only : r8 => shr_kind_r8
   use abortutils  , only : endrun
   use clm_varpar  , only : mxpft, numrad, ivis, inir, cft_lb, cft_ub
-  use clm_varctl  , only : iulog, use_cndv, use_vertsoilc, use_crop
+  use clm_varctl  , only : iulog, use_cndv, use_vertsoilc, use_crop, use_covercropping
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -93,8 +93,8 @@ module pftconMod
   integer :: nirrig_switchgrass
   integer :: ntrp_corn              ! value for tropical corn (rf)
   integer :: nirrig_trp_corn        ! value for tropical corn (ir)
-  integer :: ncovercrop_1           ! before value for tropical soybean (rf)
-  integer :: ncovercrop_2           ! before value for tropical soybean (if)
+  integer :: ncovercrop_1 = 0       ! optional cover-crop PFT index for rotation logic
+  integer :: ncovercrop_2 = 0       ! optional cover-crop PFT index for rotation logic
   integer :: npcropmax              ! value for last prognostic crop in list
   integer :: nc3crop                ! value for generic crop (rf)
   integer :: nc3irrig               ! value for irrigated generic crop (ir)
@@ -609,8 +609,10 @@ contains
     expected_pftnames(74) = 'irrigated_switchgrass              '
     expected_pftnames(75) = 'tropical_corn                      '
     expected_pftnames(76) = 'irrigated_tropical_corn            '
-    expected_pftnames(77) = 'covercrop_1                        '
-    expected_pftnames(78) = 'covercrop_2                        '
+    if (use_covercropping) then
+       expected_pftnames(77) = 'covercrop_1                        '
+       expected_pftnames(78) = 'covercrop_2                        '
+    end if
     
 ! Set specific vegetation type values
 
@@ -1042,8 +1044,12 @@ contains
 
 !Cover crop flag read-in
 
-    call ncd_io('covercrop', this%covercrop, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in cover crop flag'//errMsg(sourcefile, __LINE__))
+    if (use_covercropping) then
+       call ncd_io('covercrop', this%covercrop, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in cover crop flag'//errMsg(sourcefile, __LINE__))
+    else
+       this%covercrop(:) = 0._r8
+    end if
 
     !
     ! Constants
@@ -1175,8 +1181,10 @@ contains
        if ( trim(pftname(i)) == 'irrigated_switchgrass'               ) nirrig_switchgrass   = i
        if ( trim(pftname(i)) == 'tropical_corn'                       ) ntrp_corn            = i
        if ( trim(pftname(i)) == 'irrigated_tropical_corn'             ) nirrig_trp_corn      = i
-       if ( trim(pftname(i)) == 'covercrop_1'                         ) ncovercrop_1         = i
-       if ( trim(pftname(i)) == 'covercrop_2'                         ) ncovercrop_2         = i
+       if (use_covercropping) then
+          if ( trim(pftname(i)) == 'covercrop_1'                      ) ncovercrop_1         = i
+          if ( trim(pftname(i)) == 'covercrop_2'                      ) ncovercrop_2         = i
+       end if
     
     end do
 

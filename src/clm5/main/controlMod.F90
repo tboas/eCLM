@@ -258,7 +258,7 @@ contains
 
     namelist /clm_inparm/ &
          use_lch4, use_nitrif_denitrif, use_vertsoilc, use_extralakelayers, &
-         use_vichydro, use_century_decomp, use_cn, use_cndv, use_crop, use_fertilizer, use_cfert, use_ozone, &
+         use_vichydro, use_century_decomp, use_cn, use_cndv, use_crop, use_covercropping, use_fertilizer, use_cfert, use_ozone, &
          use_grainproduct, use_snicar_frc, use_vancouver, use_mexicocity, use_noio, &
          use_nguardrail
     namelist /cfert_inparm/ manure_CN_ratio, manure_fmet, manure_fcel, manure_flig, &
@@ -599,6 +599,7 @@ contains
     call mpi_bcast (use_cndv, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_nguardrail, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_crop, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_covercropping, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fertilizer, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_cfert,       1, MPI_LOGICAL, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_CN_ratio,        1, MPI_REAL8, 0, mpicom, ier)  ! tboas
