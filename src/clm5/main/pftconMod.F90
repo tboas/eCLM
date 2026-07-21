@@ -51,8 +51,10 @@ module pftconMod
   integer :: nirrig_wrye            ! value for winter rye (ir)
   integer :: ncassava               ! ...and so on
   integer :: nirrig_cassava
-  integer :: napple
-  integer :: nirrig_apple
+  integer :: napple       = -1  ! tboas: -1 = inactive (use_fruittree=.false.)
+  integer :: nirrig_apple = -1  ! tboas: -1 = inactive
+  integer :: ncitrus            ! citrus PFT (backward compat with old param file)
+  integer :: nirrig_citrus      ! irrigated citrus (backward compat)
   integer :: ncocoa
   integer :: nirrig_cocoa
   integer :: ncoffee
@@ -93,6 +95,8 @@ module pftconMod
   integer :: nirrig_switchgrass
   integer :: ntrp_corn              ! value for tropical corn (rf)
   integer :: nirrig_trp_corn        ! value for tropical corn (ir)
+  integer :: ntrp_soybean           ! value for tropical soybean (rf)
+  integer :: nirrig_trp_soybean     ! value for tropical soybean (ir)
   integer :: ncovercrop_1 = 0       ! optional cover-crop PFT index for rotation logic
   integer :: ncovercrop_2 = 0       ! optional cover-crop PFT index for rotation logic
   integer :: npcropmax              ! value for last prognostic crop in list
@@ -525,6 +529,7 @@ contains
     character(len=pftname_len) :: expected_pftnames(0:mxpft)
     character(len=512) :: msg
     !-----------------------------------------------------------------------
+    expected_pftnames(:) = ' '  ! tboas: init blank so unset slots skip validation
     !
     ! Expected PFT names: The names expected on the paramfile file and the order they are expected to be in.
     ! NOTE: similar types are assumed to be together, first trees (ending with broadleaf_deciduous_boreal_tree
@@ -532,6 +537,7 @@ contains
     !       and finally crops, ending with irrigated_tropical_soybean
     ! DO NOT CHANGE THE ORDER -- WITHOUT MODIFYING OTHER PARTS OF THE CODE WHERE THE ORDER MATTERS!
 
+    expected_pftnames(:) = ' '  ! tboas: init blank so unset slots skip validation
     expected_pftnames( 0) = 'not_vegetated                      '
     expected_pftnames( 1) = 'needleleaf_evergreen_temperate_tree'
     expected_pftnames( 2) = 'needleleaf_evergreen_boreal_tree   '
@@ -617,6 +623,9 @@ contains
     if (use_covercropping) then
        expected_pftnames(77) = 'covercrop_1                        '
        expected_pftnames(78) = 'covercrop_2                        '
+    else
+       expected_pftnames(77) = 'tropical_soybean                   '
+       expected_pftnames(78) = 'irrigated_tropical_soybean         '
     end if
 
 ! Set specific vegetation type values
@@ -992,77 +1001,104 @@ contains
        this%ndays_stor(:) = 0._r8
     end if
 
-    call ncd_io('prune_fr', this%prune_fr, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('nstem', this%nstem, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('taper', this%taper, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('cc_leaf', this% cc_leaf, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('cc_lstem', this%cc_lstem, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('cc_dstem', this%cc_dstem, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('cc_other', this%cc_other, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_leaf', this% fm_leaf, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_lstem', this%fm_lstem, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_dstem', this%fm_dstem, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_other', this%fm_other, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_root', this% fm_root, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_lroot', this%fm_lroot, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fm_droot', this%fm_droot, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fsr_pft', this% fsr_pft, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('fd_pft', this%  fd_pft, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('planting_temp', this%planttemp, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('min_planting_temp', this%minplanttemp, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('min_NH_planting_date', this%mnNHplantdate, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('min_SH_planting_date', this%mnSHplantdate, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('max_NH_planting_date', this%mxNHplantdate, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('max_NH_harvest_date', this%mxNHharvdate, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('max_SH_harvest_date', this%mxSHharvdate, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-
-    call ncd_io('max_SH_planting_date', this%mxSHplantdate, 'read', ncid, readvar=readv)
-    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    if (use_fruittree) then
+       call ncd_io('prune_fr', this%prune_fr, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('nstem', this%nstem, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('taper', this%taper, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('cc_leaf', this% cc_leaf, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('cc_lstem', this%cc_lstem, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('cc_dstem', this%cc_dstem, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('cc_other', this%cc_other, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_leaf', this% fm_leaf, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_lstem', this%fm_lstem, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_dstem', this%fm_dstem, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_other', this%fm_other, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_root', this% fm_root, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_lroot', this%fm_lroot, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fm_droot', this%fm_droot, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fsr_pft', this% fsr_pft, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('fd_pft', this%  fd_pft, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('planting_temp', this%planttemp, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('min_planting_temp', this%minplanttemp, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('min_NH_planting_date', this%mnNHplantdate, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('min_SH_planting_date', this%mnSHplantdate, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('max_NH_planting_date', this%mxNHplantdate, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('max_NH_harvest_date', this%mxNHharvdate, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('max_SH_harvest_date', this%mxSHharvdate, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+   
+       call ncd_io('max_SH_planting_date', this%mxSHplantdate, 'read', ncid, readvar=readv)
+       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    else
+       this%prune_fr(:)      = 0._r8
+       this%nstem(:)         = 0._r8
+       this%cc_leaf(:)       = 0._r8
+       this%fm_leaf(:)       = 0._r8
+       this%fm_root(:)       = 0._r8
+       this%fsr_pft(:)       = 0._r8
+       this%fd_pft(:)        = 0._r8
+       this%taper(:) = 0._r8
+       this%cc_lstem(:) = 0._r8
+       this%cc_dstem(:) = 0._r8
+       this%cc_other(:) = 0._r8
+       this%fm_lstem(:) = 0._r8
+       this%fm_dstem(:) = 0._r8
+       this%fm_other(:) = 0._r8
+       this%fm_lroot(:) = 0._r8
+       this%fm_droot(:) = 0._r8
+       this%planttemp(:) = 0._r8
+       this%minplanttemp(:) = 0._r8
+       this%mnNHplantdate(:) = 0._r8
+       this%mnSHplantdate(:) = 0._r8
+       this%mxNHplantdate(:) = 0._r8
+       this%mxNHharvdate(:) = 0._r8
+       this%mxSHharvdate(:) = 0._r8
+       this%mxSHplantdate(:) = 0._r8
+    end if
 
 !Cover crop flag read-in --- tboas
     ! Default: zero array - backward compatible with standard 79-PFT param file.
@@ -1138,7 +1174,8 @@ contains
 
     do i = 0, mxpft
        if (.not. use_fates)then
-          if ( trim(adjustl(pftname(i))) /= trim(expected_pftnames(i)) )then
+          if ( trim(expected_pftnames(i)) /= ' ' .and. &
+               trim(adjustl(pftname(i))) /= trim(expected_pftnames(i)) )then
              write(iulog,*)'pftconrd: pftname is NOT what is expected, name = ', &
                   trim(pftname(i)), ', expected name = ', trim(expected_pftnames(i))
              call endrun(msg='pftconrd: bad name for pft on paramfile dataset'//errMsg(sourcefile, __LINE__))
@@ -1183,6 +1220,9 @@ contains
        if (use_fruittree) then
           if ( trim(pftname(i)) == 'apple'          ) napple        = i
           if ( trim(pftname(i)) == 'irrigated_apple') nirrig_apple  = i
+       else
+          if ( trim(pftname(i)) == 'citrus'          ) ncitrus       = i
+          if ( trim(pftname(i)) == 'irrigated_citrus') nirrig_citrus = i
        end if
        if ( trim(pftname(i)) == 'cocoa'                               ) ncocoa               = i
        if ( trim(pftname(i)) == 'irrigated_cocoa'                     ) nirrig_cocoa         = i
@@ -1224,6 +1264,8 @@ contains
        if ( trim(pftname(i)) == 'irrigated_switchgrass'               ) nirrig_switchgrass   = i
        if ( trim(pftname(i)) == 'tropical_corn'                       ) ntrp_corn            = i
        if ( trim(pftname(i)) == 'irrigated_tropical_corn'             ) nirrig_trp_corn      = i
+       if ( trim(pftname(i)) == 'tropical_soybean'                    ) ntrp_soybean         = i
+       if ( trim(pftname(i)) == 'irrigated_tropical_soybean'          ) nirrig_trp_soybean   = i
        if (use_covercropping) then
           if ( trim(pftname(i)) == 'covercrop_1'                      ) ncovercrop_1         = i
           if ( trim(pftname(i)) == 'covercrop_2'                      ) ncovercrop_2         = i
@@ -1260,6 +1302,7 @@ contains
                 i == nirrig_rye             .or. i == nirrig_wrye        .or. &
                 i == nirrig_cassava         .or.                              &
                 i == nirrig_apple           .or.                              &
+                i == nirrig_citrus          .or.                              &
                 i == nirrig_cocoa           .or. i == nirrig_coffee      .or. &
                 i == nirrig_cotton          .or.                              &
                 i == nirrig_datepalm        .or.                              &
@@ -1273,7 +1316,8 @@ contains
                 i == nirrig_sugarbeet       .or. i == nirrig_sugarcane   .or. &
                 i == nirrig_sunflower       .or.                              &
                 i == nirrig_miscanthus      .or. i == nirrig_switchgrass .or. &
-                i == nirrig_trp_corn ) )then
+                i == nirrig_trp_corn        .or.                              &
+                i == nirrig_trp_soybean ) )then
              ! correct
           else if ( this%irrigated(i) == 0.0_r8 )then
              ! correct

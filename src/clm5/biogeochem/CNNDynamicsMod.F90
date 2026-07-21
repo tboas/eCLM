@@ -328,7 +328,7 @@ contains
        waterstate_inst, crop_inst, cnveg_state_inst, cnveg_nitrogenflux_inst , &
        soilbiogeochem_state_inst, soilbiogeochem_nitrogenstate_inst, soilbiogeochem_nitrogenflux_inst)
     !
-    use pftconMod, only : ntmp_soybean, nirrig_tmp_soybean
+    use pftconMod, only : ntmp_soybean, nirrig_tmp_soybean, ntrp_soybean, nirrig_trp_soybean
     !
     type(bounds_type)                      , intent(in)    :: bounds
     integer                                , intent(in)    :: num_soilc
@@ -376,7 +376,9 @@ contains
 
          if (croplive(p) .and. &
               (patch%itype(p) == ntmp_soybean .or. &
-               patch%itype(p) == nirrig_tmp_soybean)) then
+               patch%itype(p) == nirrig_tmp_soybean .or. &
+               patch%itype(p) == ntrp_soybean .or. &
+               patch%itype(p) == nirrig_trp_soybean)) then
 
             if (fpg(c) < 1._r8) then
                soy_ndemand = 0._r8
