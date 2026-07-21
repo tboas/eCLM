@@ -81,6 +81,7 @@ character(len=fname_len), public :: finidat_interp_dest   = ''
 !----------------------------------------------------------
 logical, public :: use_crop             = .false.
 logical, public :: use_covercropping    = .false.
+logical, public :: use_fruittree        = .false.  ! tboas: apple/perennial crop phenology
 character(len=256), public :: transient_landuse_file = ' '  ! tboas
 character(len=fname_len), public :: covercrop_paramfile = ' '  ! tboas
 logical, public :: create_crop_landunit = .false.

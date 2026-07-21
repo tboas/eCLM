@@ -218,6 +218,7 @@ contains
 
 
     ! FATES Flags
+    namelist /clm_inparm/ use_fruittree         ! tboas
     namelist /clm_inparm/ covercrop_paramfile    ! tboas: param file for covercrop PFTs
     namelist /clm_inparm/ transient_landuse_file ! tboas: cover-crop rotation file
     namelist /clm_inparm/ covercrop_paramfile    ! tboas
@@ -603,6 +604,7 @@ contains
     call mpi_bcast (use_cndv, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_nguardrail, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_crop, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_fruittree,          1, MPI_LOGICAL,   0, mpicom, ier)  ! tboas
     call mpi_bcast (use_covercropping,      1, MPI_LOGICAL,   0, mpicom, ier)
     call mpi_bcast (covercrop_paramfile,    len(covercrop_paramfile),    MPI_CHARACTER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (transient_landuse_file, len(transient_landuse_file), MPI_CHARACTER, 0, mpicom, ier)  ! tboas
