@@ -2953,14 +2953,19 @@ contains
     ! module.
     !
     ! !USES:
-    use dynHarvestMod, only : covercropping_update_patch
+    use dynHarvestMod,    only : covercropping_update_patch
+    use clm_time_manager, only : get_curr_date  ! tboas
 
     ! !ARGUMENTS:
-    integer                , intent(in)    :: p    ! PATCH index running over
+    integer                , intent(in)    :: p
     type(crop_type)        , intent(inout) :: crop_inst
     type(cnveg_state_type) , intent(inout) :: cnveg_state_inst
+    ! !LOCAL VARIABLES:
+    integer :: curr_yr, curr_mon, curr_day, curr_sec
 
-    call covercropping_update_patch(p, crop_inst, cnveg_state_inst)
+    call get_curr_date(curr_yr, curr_mon, curr_day, curr_sec)
+    call covercropping_update_patch(p, curr_mon, curr_day, &
+         crop_inst, cnveg_state_inst)
 
   end subroutine covercropping
 

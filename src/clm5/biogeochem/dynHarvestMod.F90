@@ -19,9 +19,10 @@ module dynHarvestMod
   use CNVegNitrogenStateType  , only : cnveg_nitrogenstate_type
   use CNVegNitrogenFluxType   , only : cnveg_nitrogenflux_type
   use SoilBiogeochemStateType , only : soilbiogeochem_state_type
-  use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2
+  use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2, npcropmin
   use clm_varcon              , only : grlnd
   use clm_varctl              , only : use_covercropping, use_grainproduct
+  use clm_time_manager        , only : get_curr_date  ! tboas
   use dynCovercropFileMod     , only : covercrop_switch_ivt  ! tboas
   use ColumnType              , only : col                
   use PatchType               , only : patch                
@@ -192,46 +193,56 @@ contains
     type(cnveg_state_type), intent(inout) :: cnveg_state_inst
     !
     ! !LOCAL VARIABLES:
-    integer :: p
+    integer :: p, curr_yr, curr_mon, curr_day, curr_sec
     !------------------------------------------------------------------------
 
     if (.not. use_covercropping) return
+    call get_curr_date(curr_yr, curr_mon, curr_day, curr_sec)
 
     do p = bounds%begp, bounds%endp
-       call covercropping_update_patch(p, crop_inst, cnveg_state_inst)
+       call covercropping_update_patch(p, curr_mon, curr_day, &
+            crop_inst, cnveg_state_inst)
     end do
 
   end subroutine covercropping_update
 
   !-----------------------------------------------------------------------
-  subroutine covercropping_update_patch(p, crop_inst, cnveg_state_inst)
+  subroutine covercropping_update_patch(p, curr_mon, curr_day, &
+       crop_inst, cnveg_state_inst)
     !
     ! !DESCRIPTION:
-    ! After harvest of any cash crop, switch the patch ivt to the next crop
-    ! defined in the cover-crop rotation file (transient_landuse_file).
-    ! Delegates to covercrop_switch_ivt in dynCovercropFileMod.
-    ! tboas: file-driven rotation, no hardcoded sequences.
+    ! Calendar-date based rotation switch. Checks at 3 fixed dates per year:
+    !   Jan 1  : summer->summer rotation
+    !   Mar 1  : covercrop/winter crop -> spring cash crop
+    !   Oct 1  : post-harvest -> winter wheat or covercrop
+    ! tboas: replaces harvest-triggered switch.
     !
     ! !ARGUMENTS:
     integer                , intent(in)    :: p
+    integer                , intent(in)    :: curr_mon
+    integer                , intent(in)    :: curr_day
     type(crop_type)        , intent(inout) :: crop_inst
     type(cnveg_state_type) , intent(inout) :: cnveg_state_inst
     !
     ! !LOCAL VARIABLES:
-    integer, parameter :: NOT_Planted = 999
+    logical :: is_switch_date
     !------------------------------------------------------------------------
 
-    associate(                                             &
-         ivt               =>    patch%itype                     , & ! Input: [integer (:) ] patch vegetation type
-         harvdate          =>    crop_inst%harvdate_patch        , & ! Input:  [integer (:) ] harvest date
-         covercrop         =>    pftcon%covercrop                  & ! Input: cover-crop flag
-         )
+    associate( &
+         covercrop => pftcon%covercrop &
+         )  ! cover-crop flag array
 
-      ! Only act on patches flagged as cover-crop rotation members
-      if (covercrop(ivt(p)) /= 1) return
+      ! Only act on crop patches (any crop PFT >= npcropmin) --- tboas
+      ! Note: covercrop flag not used here as not all rotation crops are flagged
+      if (patch%itype(p) < npcropmin) return
 
-      ! Only switch after harvest has occurred this season
-      if (harvdate(p) <= 0) return
+      ! Switch only on 3 calendar dates per year
+      is_switch_date = &
+           (curr_mon == 1  .and. curr_day == 1) .or. &   ! Jan 1
+           (curr_mon == 3  .and. curr_day == 1) .or. &   ! Mar 1
+           (curr_mon == 10 .and. curr_day == 1)           ! Oct 1
+
+      if (.not. is_switch_date) return
 
       ! Delegate to file-driven rotation
       call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst)

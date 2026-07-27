@@ -29,6 +29,7 @@ module dynCovercropFileMod
   use clm_varcon              , only : grlnd
   use clm_varpar              , only : cft_size, cft_lb
   use abortutils              , only : endrun
+  use histFileMod             , only : hist_addfld1d
   use spmdMod                 , only : masterproc
   use PatchType               , only : patch
   use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2
@@ -46,6 +47,7 @@ module dynCovercropFileMod
   type(dyn_file_type), target :: dyncovercrop_file
   real(r8), allocatable :: pct_cft_cur (:,:)  ! (begg:endg, cft_size)
   real(r8), allocatable :: pct_cft_next(:,:)  ! (begg:endg, cft_size)
+  real(r8), pointer :: active_ivt_patch(:) => null() ! (begp:endp) active itype for history  ! tboas
 
   character(len=*), parameter, private :: sourcefile = __FILE__
 
@@ -58,7 +60,7 @@ contains
     use ncdio_pio             , only : check_dim
     type(bounds_type), intent(in) :: bounds
     type(dyn_var_time_uninterp_type) :: wtcft_obj
-    integer :: num_points, pct_cft_shape(2)
+    integer :: num_points, pct_cft_shape(2), pi
     character(len=*), parameter :: subname = "dyncovercrop_init"
     !-----------------------------------------------------------------------
     SHR_ASSERT_ALL(bounds%level == BOUNDS_LEVEL_PROC, &
@@ -81,6 +83,15 @@ contains
     pct_cft_cur  = 0._r8
     pct_cft_next = 0._r8
     call dyncovercrop_interp(bounds)
+
+    ! Register IVT as history field for rotation diagnostics --- tboas
+    allocate(active_ivt_patch(bounds%begp:bounds%endp))
+    do pi = bounds%begp, bounds%endp
+       active_ivt_patch(pi) = real(patch%itype(pi), r8)
+    end do
+    call hist_addfld1d(fname='IVT', units='unitless', &
+         avgflag='A', long_name='current patch vegetation type index', &
+         ptr_patch=active_ivt_patch, default='active')
   end subroutine dyncovercrop_init
 
   !-----------------------------------------------------------------------
@@ -89,7 +100,7 @@ contains
     use ncdio_pio             , only : ncd_io
     type(bounds_type), intent(in) :: bounds
     type(dyn_var_time_uninterp_type) :: wtcft_obj
-    integer :: num_points, pct_cft_shape(2)
+    integer :: num_points, pct_cft_shape(2), pi
     integer :: idx_next, ntimes
     real(r8), pointer :: raw_next(:,:)  ! (lndgrid, cft) pointer for ncd_io_2d
     logical :: readvar
@@ -128,6 +139,12 @@ contains
        if (masterproc) write(iulog,*) "dyncovercrop_interp: end of timeseries, using current year for pct_cft_next"
     end if
     deallocate(raw_next)
+    ! Update IVT history field with current patch itype --- tboas
+    if (associated(active_ivt_patch)) then
+       do pi = bounds%begp, bounds%endp
+          active_ivt_patch(pi) = real(patch%itype(pi), r8)
+       end do
+    end if
   end subroutine dyncovercrop_interp
 
   !-----------------------------------------------------------------------
@@ -142,14 +159,14 @@ contains
     integer, parameter :: NOT_Planted = 999
     !-----------------------------------------------------------------------
     if (.not. use_covercropping)       return
-    if (.not. allocated(pct_cft_next)) return
+    if (.not. allocated(pct_cft_cur)) return
     g = patch%gridcell(p)
     ! Find dominant CFT in next-year slice for this gridcell
     best_cft = 1
     best_pct = -1._r8
     do cft = 1, cft_size
-       if (pct_cft_next(g, cft) > best_pct) then
-          best_pct = pct_cft_next(g, cft)
+       if (pct_cft_cur(g, cft) > best_pct) then
+          best_pct = pct_cft_cur(g, cft)
           best_cft = cft
        end if
     end do
@@ -158,9 +175,11 @@ contains
     new_ivt = cft_lb + best_cft - 1
     if (new_ivt == patch%itype(p)) return
     patch%itype(p)                       = new_ivt
+    if (associated(active_ivt_patch)) active_ivt_patch(p) = real(new_ivt, r8)
     crop_inst%croplive_patch(p)          = .false.
     crop_inst%cropplant_patch(p)         = .false.
     cnveg_state_inst%idop_patch(p)       = NOT_Planted
+    ! tboas: C/N pools kept from previous crop; C balance tolerance relaxed in CNBalanceCheckMod
     ! Suppress grain product accounting for cover crops
     if (new_ivt == ncovercrop_1 .or. new_ivt == ncovercrop_2) then
        use_grainproduct = .false.
