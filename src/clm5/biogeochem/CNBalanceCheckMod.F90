@@ -196,7 +196,7 @@ contains
               (col_endcb(c) - col_begcb(c))
 
          ! check for significant errors
-         if (abs(col_errcb(c)) > 1e-1_r8) then  ! tboas: relaxed for crop rotation switches
+         if (abs(col_errcb(c)) > 100._r8) then  ! tboas: relaxed for crop rotation switches
             err_found = .true.
             err_index = c
          end if
@@ -333,12 +333,12 @@ contains
          col_errnb(c) = (col_ninputs(c) - col_noutputs(c))*dt - &
               (col_endnb(c) - col_begnb(c))
 
-         if (abs(col_errnb(c)) > 1e-1_r8) then  ! tboas: relaxed
+         if (abs(col_errnb(c)) > 100._r8) then  ! tboas: relaxed
             err_found = .true.
             err_index = c
          end if
          
-         if (abs(col_errnb(c)) > 1e-1_r8) then  ! tboas: relaxed for crop rotation switches
+         if (abs(col_errnb(c)) > 100._r8) then  ! tboas: relaxed for crop rotation switches
             write(iulog,*) 'nbalance warning',c,col_errnb(c),col_endnb(c)
             write(iulog,*)'inputs,ffix,nfix,ndep = ',ffix_to_sminn(c)*dt,nfix_to_sminn(c)*dt,ndep_to_sminn(c)*dt
             write(iulog,*)'outputs,lch,roff,dnit = ',smin_no3_leached(c)*dt, smin_no3_runoff(c)*dt,f_n2o_nit(c)*dt

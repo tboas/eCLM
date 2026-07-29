@@ -90,7 +90,7 @@ contains
        active_ivt_patch(pi) = real(patch%itype(pi), r8)
     end do
     call hist_addfld1d(fname='IVT', units='unitless', &
-         avgflag='A', long_name='current patch vegetation type index', &
+         avgflag='I', long_name='current patch vegetation type index', &
          ptr_patch=active_ivt_patch, default='active')
   end subroutine dyncovercrop_init
 
@@ -148,10 +148,11 @@ contains
   end subroutine dyncovercrop_interp
 
   !-----------------------------------------------------------------------
-  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst)
+  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, use_next)
     use CropType         , only : crop_type
     use CNVegStateType   , only : cnveg_state_type
     integer               , intent(in)    :: p
+    logical               , intent(in)    :: use_next  ! .true. = use pct_cft_next
     type(crop_type)       , intent(inout) :: crop_inst
     type(cnveg_state_type), intent(inout) :: cnveg_state_inst
     integer  :: g, cft, best_cft, new_ivt
@@ -165,9 +166,16 @@ contains
     best_cft = 1
     best_pct = -1._r8
     do cft = 1, cft_size
-       if (pct_cft_cur(g, cft) > best_pct) then
-          best_pct = pct_cft_cur(g, cft)
-          best_cft = cft
+       if (use_next) then
+          if (pct_cft_next(g, cft) > best_pct) then
+             best_pct = pct_cft_next(g, cft)
+             best_cft = cft
+          end if
+       else
+          if (pct_cft_cur(g, cft) > best_pct) then
+             best_pct = pct_cft_cur(g, cft)
+             best_cft = cft
+          end if
        end if
     end do
     ! Convert CFT array index to global PFT index

@@ -245,7 +245,15 @@ contains
       if (.not. is_switch_date) return
 
       ! Delegate to file-driven rotation
-      call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst)
+      ! Oct 1: plant next year's winter crop — but only if crop not currently alive
+      !        (prevents killing a winter crop still in its growing season)
+      ! Jan/Mar: confirm current year crop
+      if (curr_mon == 10 .and. curr_day == 1) then
+         if (crop_inst%croplive_patch(p)) return  ! tboas: don't interrupt growing crop
+         call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, use_next=.true.)
+      else
+         call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, use_next=.false.)
+      end if
 
     end associate
 

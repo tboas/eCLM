@@ -2955,6 +2955,7 @@ contains
     ! !USES:
     use dynHarvestMod,    only : covercropping_update_patch
     use clm_time_manager, only : get_curr_date  ! tboas
+    use clm_varctl,       only : use_covercropping  ! tboas
 
     ! !ARGUMENTS:
     integer                , intent(in)    :: p
@@ -2963,6 +2964,7 @@ contains
     ! !LOCAL VARIABLES:
     integer :: curr_yr, curr_mon, curr_day, curr_sec
 
+    if (.not. use_covercropping) return  ! tboas: skip when rotation not active
     call get_curr_date(curr_yr, curr_mon, curr_day, curr_sec)
     call covercropping_update_patch(p, curr_mon, curr_day, &
          crop_inst, cnveg_state_inst)
