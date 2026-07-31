@@ -19,7 +19,7 @@ module dynHarvestMod
   use CNVegNitrogenStateType  , only : cnveg_nitrogenstate_type
   use CNVegNitrogenFluxType   , only : cnveg_nitrogenflux_type
   use SoilBiogeochemStateType , only : soilbiogeochem_state_type
-  use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2, npcropmin
+  use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2, npcropmin, nwwheat, nirrig_wwheat, nwbarley, nirrig_wbarley
   use clm_varcon              , only : grlnd
   use clm_varctl              , only : use_covercropping, use_grainproduct
   use clm_time_manager        , only : get_curr_date  ! tboas
@@ -36,6 +36,7 @@ module dynHarvestMod
   public :: dynHarvest_init    ! initialize data structures for harvest information
   public :: dynHarvest_interp  ! get harvest data for current time step, if needed
   public :: covercropping_update
+  public :: covercropping_postharvest  ! tboas
   public :: covercropping_update_patch
   public :: CNHarvest          ! harvest mortality routine for CN code
   !
@@ -236,29 +237,31 @@ contains
       ! Note: covercrop flag not used here as not all rotation crops are flagged
       if (patch%itype(p) < npcropmin) return
 
-      ! Switch only on 3 calendar dates per year
-      is_switch_date = &
-           (curr_mon == 1  .and. curr_day == 1) .or. &   ! Jan 1
-           (curr_mon == 3  .and. curr_day == 1) .or. &   ! Mar 1
-           (curr_mon == 10 .and. curr_day == 1)           ! Oct 1
-
-      if (.not. is_switch_date) return
-
-      ! Delegate to file-driven rotation
-      ! Oct 1: plant next year's winter crop — but only if crop not currently alive
-      !        (prevents killing a winter crop still in its growing season)
-      ! Jan/Mar: confirm current year crop
-      if (curr_mon == 10 .and. curr_day == 1) then
-         if (crop_inst%croplive_patch(p)) return  ! tboas: don't interrupt growing crop
-         call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, use_next=.true.)
-      else
-         call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, use_next=.false.)
-      end if
+      ! Calendar switches removed — rotation handled by post-harvest only --- tboas
+      return
 
     end associate
 
   end subroutine covercropping_update_patch
 
+  !-----------------------------------------------------------------------
+  subroutine covercropping_postharvest(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst)
+    ! Post-harvest rotation switch — bypasses calendar date check --- tboas
+    ! Switches to current year crop immediately after summer crop harvest
+    use CropType              , only : crop_type
+    use CNVegStateType        , only : cnveg_state_type
+    use CNVegCarbonStateType  , only : cnveg_carbonstate_type
+    use clm_varctl            , only : use_covercropping, iulog
+    integer,                     intent(in)    :: p
+    type(crop_type),             intent(inout) :: crop_inst
+    type(cnveg_state_type),      intent(inout) :: cnveg_state_inst
+    type(cnveg_carbonstate_type), intent(inout) :: cnveg_carbonstate_inst
+    if (.not. use_covercropping) return
+    write(iulog,*) 'POSTHARVEST_DEBUG: p=',p,' patch%itype=',patch%itype(p)  ! tboas
+    ! Use pct_cft_next for post-harvest: switch to NEXT year crop after harvest --- tboas
+    ! This correctly handles WW→SB: after WW harvest in Jul 2013, switch to SB (2014)
+    call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst, use_next=.true.)
+  end subroutine covercropping_postharvest
   !-----------------------------------------------------------------------
   subroutine CNHarvest (num_soilc, filter_soilc, num_soilp, filter_soilp, &
        soilbiogeochem_state_inst, cnveg_carbonstate_inst, cnveg_nitrogenstate_inst, &

@@ -15,6 +15,7 @@ module CNPhenologyMod
   use shr_sys_mod                     , only : shr_sys_flush
   use decompMod                       , only : bounds_type
   use clm_varpar                      , only : numpft, nlevdecomp_full
+  use dynHarvestMod                  , only : covercropping_postharvest  ! tboas
   use clm_varctl                      , only : iulog, use_cndv, use_cfert, manure_CN_ratio, &
        manure_freq_years, manure_apply_month, manure_apply_day  ! tboas
   use clm_varcon                      , only : tfrz
@@ -2495,8 +2496,8 @@ contains
                   if (ivt(p) == ntmp_corn .or. ivt(p) == nirrig_tmp_corn .or. &
                       ivt(p) == ntrp_corn .or. ivt(p) == nirrig_trp_corn .or. &
                       ivt(p) == nsugarcane .or. ivt(p) == nirrig_sugarcane) then
-                     gddmaturity(p) = max(950._r8, min(gdd820(p)*0.85_r8, hybgdd(ivt(p))))
-                     gddmaturity(p) = max(950._r8, min(gddmaturity(p)+150._r8, 1850._r8))
+                     gddmaturity(p) = hybgdd(ivt(p))  ! tboas: use hybgdd directly
+                     gddmaturity(p) = gddmaturity(p)  ! tboas: no adjustment
                   end if
                   if (ivt(p) == nswheat .or. ivt(p) == nirrig_swheat .or. &
                       ivt(p) == nsugarbeet .or. ivt(p) == nirrig_sugarbeet .or. &
@@ -2791,10 +2792,13 @@ contains
                    harvdate(p) = jday
                   if (covercrop(ivt(p)) == 1) then
                     call covercropping(p, crop_inst, cnveg_state_inst)
-                  else
-                   croplive(p) = .false.     ! no re-entry in greater if-block
-                   cphase(p) = 4._r8
                   end if
+                  ! Always kill crop after harvest/maturity --- tboas
+                  croplive(p) = .false.
+                  cphase(p) = 4._r8
+                  ! Post-harvest: switch to current year summer crop if needed --- tboas
+                  ! Winter crops are handled by Oct 1 switch
+                  call covercropping_postharvest(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst)
                endif
                if (tlai(p) > 0._r8) then ! plant had emerged before harvest
                   write (iulog,*)  'plant emerged'
@@ -2903,19 +2907,18 @@ contains
     maxplantjday(:,:) = huge(1)
     maxharvjday(:,:)   = huge(1)
 
-    if (use_fruittree) then  ! tboas: date vars are 0 when flag off
+    ! tboas: planting/harvest dates needed for ALL crops, not just fruittree
     do n = npcropmin, npcropmax
        if (pftcon%is_pft_known_to_model(n)) then
-          minplantjday(n, inNH) = int( get_calday( pftcon%mnNHplantdate(n), 0 ) )
-          maxplantjday(n, inNH) = int( get_calday( pftcon%mxNHplantdate(n), 0 ) )
-          maxharvjday(n, inNH) = int( get_calday( pftcon%mxNHharvdate(n), 0 ) )
-          minplantjday(n, inSH) = int( get_calday( pftcon%mnSHplantdate(n), 0 ) )
-          maxplantjday(n, inSH) = int( get_calday( pftcon%mxSHplantdate(n), 0 ) )
-          maxharvjday(n, inSH) = int( get_calday( pftcon%mxSHharvdate(n), 0 ) )
+          if (pftcon%mnNHplantdate(n) > 0) minplantjday(n, inNH) = int( get_calday( pftcon%mnNHplantdate(n), 0 ) )
+          if (pftcon%mxNHplantdate(n) > 0) maxplantjday(n, inNH) = int( get_calday( pftcon%mxNHplantdate(n), 0 ) )
+          if (pftcon%mxNHharvdate(n)  > 0) maxharvjday(n, inNH)  = int( get_calday( pftcon%mxNHharvdate(n),  0 ) )
+          if (pftcon%mnSHplantdate(n) > 0) minplantjday(n, inSH) = int( get_calday( pftcon%mnSHplantdate(n), 0 ) )
+          if (pftcon%mxSHplantdate(n) > 0) maxplantjday(n, inSH) = int( get_calday( pftcon%mxSHplantdate(n), 0 ) )
+          if (pftcon%mxSHharvdate(n)  > 0) maxharvjday(n, inSH)  = int( get_calday( pftcon%mxSHharvdate(n),  0 ) )
 
        end if
     end do
-    end if  ! use_fruittree
 
     ! Figure out what hemisphere each PATCH is in
     do p = bounds%begp, bounds%endp
@@ -2953,7 +2956,7 @@ contains
     ! module.
     !
     ! !USES:
-    use dynHarvestMod,    only : covercropping_update_patch
+    use dynHarvestMod,    only : covercropping_update_patch, covercropping_postharvest
     use clm_time_manager, only : get_curr_date  ! tboas
     use clm_varctl,       only : use_covercropping  ! tboas
 

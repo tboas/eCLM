@@ -26,6 +26,9 @@ module dynCovercropFileMod
   use decompMod               , only : bounds_type, BOUNDS_LEVEL_PROC
   use dynFileMod              , only : dyn_file_type
   use clm_varctl              , only : iulog, use_covercropping, transient_landuse_file
+  use pftconMod               , only : nwwheat, nirrig_wwheat, nwbarley, nirrig_wbarley, ncovercrop_1, ncovercrop_2  ! tboas
+  use CNVegCarbonStateType    , only : cnveg_carbonstate_type  ! tboas
+  use CNVegNitrogenStateType  , only : cnveg_nitrogenstate_type  ! tboas
   use clm_varcon              , only : grlnd
   use clm_varpar              , only : cft_size, cft_lb
   use abortutils              , only : endrun
@@ -143,18 +146,20 @@ contains
     if (associated(active_ivt_patch)) then
        do pi = bounds%begp, bounds%endp
           active_ivt_patch(pi) = real(patch%itype(pi), r8)
+          if (pi == 2) write(iulog,*) 'IVT_TRACK: pi=',pi,' itype=',patch%itype(pi)  ! tboas
        end do
     end if
   end subroutine dyncovercrop_interp
 
   !-----------------------------------------------------------------------
-  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, use_next)
-    use CropType         , only : crop_type
-    use CNVegStateType   , only : cnveg_state_type
+  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst, use_next)
+    use CropType              , only : crop_type
+    use CNVegStateType        , only : cnveg_state_type
     integer               , intent(in)    :: p
     logical               , intent(in)    :: use_next  ! .true. = use pct_cft_next
     type(crop_type)       , intent(inout) :: crop_inst
     type(cnveg_state_type), intent(inout) :: cnveg_state_inst
+    type(cnveg_carbonstate_type), intent(inout) :: cnveg_carbonstate_inst
     integer  :: g, cft, best_cft, new_ivt
     real(r8) :: best_pct
     integer, parameter :: NOT_Planted = 999
@@ -181,12 +186,29 @@ contains
     ! Convert CFT array index to global PFT index
     ! cft_lb = first crop PFT index = natpft_ub + 1
     new_ivt = cft_lb + best_cft - 1
+    write(iulog,*) 'SWITCH_DEBUG: new_ivt=',new_ivt,' patch%itype=',patch%itype(p),' use_next=',use_next,' best_cft=',best_cft  ! tboas
     if (new_ivt == patch%itype(p)) return
+    ! tboas: no crop-type restriction — any crop can be switched to post-harvest
     patch%itype(p)                       = new_ivt
     if (associated(active_ivt_patch)) active_ivt_patch(p) = real(new_ivt, r8)
     crop_inst%croplive_patch(p)          = .false.
     crop_inst%cropplant_patch(p)         = .false.
     cnveg_state_inst%idop_patch(p)       = NOT_Planted
+    ! Reset phenology GDD state so new crop starts fresh --- tboas
+    crop_inst%gddplant_patch(p)              = 0._r8
+    cnveg_state_inst%huigrain_patch(p)       = 0._r8
+    cnveg_state_inst%gddmaturity_patch(p)    = 0._r8
+    crop_inst%harvdate_patch(p)              = NOT_Planted
+    crop_inst%cphase_patch(p)                = 0._r8
+    ! Reset phenology onset/offset flags --- tboas
+    cnveg_state_inst%onset_flag_patch(p)     = 0._r8
+    cnveg_state_inst%onset_counter_patch(p)  = 0._r8
+    cnveg_state_inst%offset_flag_patch(p)    = 0._r8
+    cnveg_state_inst%offset_counter_patch(p) = 0._r8
+    cnveg_state_inst%offset2_flag_patch(p)   = 0._r8
+    cnveg_state_inst%dormant_flag_patch(p)   = 1._r8
+    ! Zero xsmrpool to prevent carbon debt from previous crop --- tboas
+    cnveg_carbonstate_inst%xsmrpool_patch(p) = 0._r8
     ! tboas: C/N pools kept from previous crop; C balance tolerance relaxed in CNBalanceCheckMod
     ! Suppress grain product accounting for cover crops
     if (new_ivt == ncovercrop_1 .or. new_ivt == ncovercrop_2) then

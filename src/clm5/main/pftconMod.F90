@@ -1090,15 +1090,25 @@ contains
        this%fm_other(:) = 0._r8
        this%fm_lroot(:) = 0._r8
        this%fm_droot(:) = 0._r8
-       this%planttemp(:) = 0._r8
-       this%minplanttemp(:) = 0._r8
-       this%mnNHplantdate(:) = 0._r8
-       this%mnSHplantdate(:) = 0._r8
-       this%mxNHplantdate(:) = 0._r8
-       this%mxNHharvdate(:) = 0._r8
-       this%mxSHharvdate(:) = 0._r8
-       this%mxSHplantdate(:) = 0._r8
     end if
+    ! Read crop planting/harvest params for all crops (not fruittree-specific) --- tboas
+    call ncd_io('planting_temp', this%planttemp, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('min_planting_temp', this%minplanttemp, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('min_NH_planting_date', this%mnNHplantdate, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('min_SH_planting_date', this%mnSHplantdate, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('max_NH_planting_date', this%mxNHplantdate, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('max_SH_planting_date', this%mxSHplantdate, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    ! harvest dates only in apple param file --- tboas
+    call ncd_io('max_NH_harvest_date', this%mxNHharvdate, 'read', ncid, readvar=readv)
+    if ( .not. readv ) this%mxNHharvdate(:) = 1231  ! default: Dec 31
+    call ncd_io('max_SH_harvest_date', this%mxSHharvdate, 'read', ncid, readvar=readv)
+    if ( .not. readv ) this%mxSHharvdate(:) = 631   ! default: Jun 30 (SH)
 
 !Cover crop flag read-in --- tboas
     ! Default: zero array - backward compatible with standard 79-PFT param file.
