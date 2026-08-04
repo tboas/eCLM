@@ -45,6 +45,7 @@ module dynCovercropFileMod
   public :: dyncovercrop_init
   public :: dyncovercrop_interp
   public :: covercrop_switch_ivt
+  public :: covercrop_target_ivt  ! tboas
 
   !---------------------------------------------------------------------------
   type(dyn_file_type), target :: dyncovercrop_file
@@ -160,33 +161,14 @@ contains
     type(crop_type)       , intent(inout) :: crop_inst
     type(cnveg_state_type), intent(inout) :: cnveg_state_inst
     type(cnveg_carbonstate_type), intent(inout) :: cnveg_carbonstate_inst
-    integer  :: g, cft, best_cft, new_ivt
-    real(r8) :: best_pct
+    integer  :: new_ivt
     integer, parameter :: NOT_Planted = 999
     !-----------------------------------------------------------------------
     if (.not. use_covercropping)       return
     if (.not. allocated(pct_cft_cur)) return
-    g = patch%gridcell(p)
-    ! Find dominant CFT in next-year slice for this gridcell
-    best_cft = 1
-    best_pct = -1._r8
-    do cft = 1, cft_size
-       if (use_next) then
-          if (pct_cft_next(g, cft) > best_pct) then
-             best_pct = pct_cft_next(g, cft)
-             best_cft = cft
-          end if
-       else
-          if (pct_cft_cur(g, cft) > best_pct) then
-             best_pct = pct_cft_cur(g, cft)
-             best_cft = cft
-          end if
-       end if
-    end do
-    ! Convert CFT array index to global PFT index
-    ! cft_lb = first crop PFT index = natpft_ub + 1
-    new_ivt = cft_lb + best_cft - 1
-    write(iulog,*) 'SWITCH_DEBUG: new_ivt=',new_ivt,' patch%itype=',patch%itype(p),' use_next=',use_next,' best_cft=',best_cft  ! tboas
+    new_ivt = covercrop_target_ivt(p, use_next)
+    if (new_ivt <= 0) return
+    write(iulog,*) 'SWITCH_DEBUG: new_ivt=',new_ivt,' patch%itype=',patch%itype(p),' use_next=',use_next  ! tboas
     if (new_ivt == patch%itype(p)) return
     ! tboas: no crop-type restriction — any crop can be switched to post-harvest
     patch%itype(p)                       = new_ivt
@@ -219,5 +201,38 @@ contains
        use_grainproduct = .true.
     end if
   end subroutine covercrop_switch_ivt
+
+  !-----------------------------------------------------------------------
+  integer function covercrop_target_ivt(p, use_next)
+    ! tboas: return the dominant CFT for patch p as a global PFT index.
+    ! Returns -1 if covercropping is off or the arrays are not allocated.
+    integer, intent(in) :: p
+    logical, intent(in) :: use_next   ! .true. = pct_cft_next, .false. = pct_cft_cur
+    integer  :: g, cft, best_cft
+    real(r8) :: best_pct
+    !-----------------------------------------------------------------------
+    covercrop_target_ivt = -1
+    if (.not. use_covercropping)      return
+    if (.not. allocated(pct_cft_cur)) return
+    if (use_next .and. .not. allocated(pct_cft_next)) return
+    g = patch%gridcell(p)
+    best_cft = 1
+    best_pct = -1._r8
+    do cft = 1, cft_size
+       if (use_next) then
+          if (pct_cft_next(g, cft) > best_pct) then
+             best_pct = pct_cft_next(g, cft)
+             best_cft = cft
+          end if
+       else
+          if (pct_cft_cur(g, cft) > best_pct) then
+             best_pct = pct_cft_cur(g, cft)
+             best_cft = cft
+          end if
+       end if
+    end do
+    ! cft_lb = first crop PFT index = natpft_ub + 1
+    covercrop_target_ivt = cft_lb + best_cft - 1
+  end function covercrop_target_ivt
 
 end module dynCovercropFileMod

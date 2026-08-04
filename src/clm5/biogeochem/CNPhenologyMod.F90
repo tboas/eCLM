@@ -15,7 +15,6 @@ module CNPhenologyMod
   use shr_sys_mod                     , only : shr_sys_flush
   use decompMod                       , only : bounds_type
   use clm_varpar                      , only : numpft, nlevdecomp_full
-  use dynHarvestMod                  , only : covercropping_postharvest  ! tboas
   use clm_varctl                      , only : iulog, use_cndv, use_cfert, manure_CN_ratio, &
        manure_freq_years, manure_apply_month, manure_apply_day  ! tboas
   use clm_varcon                      , only : tfrz
@@ -2790,15 +2789,11 @@ contains
             else if (hui(p) >= gddmaturity(p) .or. idpp >= mxmat(ivt(p))) then
                if (harvdate(p) >= NOT_Harvested)then
                    harvdate(p) = jday
-                  if (covercrop(ivt(p)) == 1) then
-                    call covercropping(p, crop_inst, cnveg_state_inst)
-                  end if
                   ! Always kill crop after harvest/maturity --- tboas
                   croplive(p) = .false.
                   cphase(p) = 4._r8
                   ! Post-harvest: switch to current year summer crop if needed --- tboas
                   ! Winter crops are handled by Oct 1 switch
-                  call covercropping_postharvest(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst)
                endif
                if (tlai(p) > 0._r8) then ! plant had emerged before harvest
                   write (iulog,*)  'plant emerged'
@@ -2946,33 +2941,6 @@ contains
 
   end subroutine CropPhenologyInit
 
- !-----------------------------------------------------------------------
-  subroutine covercropping(p, crop_inst, cnveg_state_inst)
-
-    !
-    ! !DESCRIPTION:
-    ! Wrapper to the transient land-use cover-crop rotation routine so the phenology
-    ! code stays backward-compatible while the actual logic lives in the dynamic land-use
-    ! module.
-    !
-    ! !USES:
-    use dynHarvestMod,    only : covercropping_update_patch, covercropping_postharvest
-    use clm_time_manager, only : get_curr_date  ! tboas
-    use clm_varctl,       only : use_covercropping  ! tboas
-
-    ! !ARGUMENTS:
-    integer                , intent(in)    :: p
-    type(crop_type)        , intent(inout) :: crop_inst
-    type(cnveg_state_type) , intent(inout) :: cnveg_state_inst
-    ! !LOCAL VARIABLES:
-    integer :: curr_yr, curr_mon, curr_day, curr_sec
-
-    if (.not. use_covercropping) return  ! tboas: skip when rotation not active
-    call get_curr_date(curr_yr, curr_mon, curr_day, curr_sec)
-    call covercropping_update_patch(p, curr_mon, curr_day, &
-         crop_inst, cnveg_state_inst)
-
-  end subroutine covercropping
 
   !-----------------------------------------------------------------------
   subroutine vernalization(p, &

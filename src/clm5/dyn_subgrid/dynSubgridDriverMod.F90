@@ -254,7 +254,8 @@ contains
 
     if (use_covercropping) then
        call dyncovercrop_interp(bounds_proc)  ! tboas: update pct_cft_cur/next each timestep
-       call covercropping_update(bounds_proc, crop_inst, bgc_vegetation_inst%cnveg_state_inst)
+       call covercropping_update(bounds_proc, crop_inst, bgc_vegetation_inst%cnveg_state_inst, &
+            bgc_vegetation_inst%cnveg_carbonstate_inst)
     end if
 
     ! ==========================================================================
