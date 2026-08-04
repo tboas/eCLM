@@ -2498,9 +2498,15 @@ contains
                      gddmaturity(p) = hybgdd(ivt(p))  ! tboas: use hybgdd directly
                      gddmaturity(p) = gddmaturity(p)  ! tboas: no adjustment
                   end if
+                  ! tboas: sugar beet and potato use hybgdd directly. The
+                  ! min(gdd020,...) form caps maturity at the climatological
+                  ! annual GDD (~1400 at Selhausen), forcing a ~90-day season
+                  ! and a July lift instead of the observed Apr-Oct season.
+                  if (ivt(p) == nsugarbeet .or. ivt(p) == nirrig_sugarbeet .or. &
+                      ivt(p) == npotatoes  .or. ivt(p) == nirrig_potatoes) then
+                     gddmaturity(p) = hybgdd(ivt(p))
+                  end if
                   if (ivt(p) == nswheat .or. ivt(p) == nirrig_swheat .or. &
-                      ivt(p) == nsugarbeet .or. ivt(p) == nirrig_sugarbeet .or. &
-                      ivt(p) == npotatoes .or. ivt(p) == nirrig_potatoes .or. &
                       ivt(p) == ncotton .or. ivt(p) == nirrig_cotton .or. &
                       ivt(p) == nrice   .or. ivt(p) == nirrig_rice) then
                      gddmaturity(p) = min(gdd020(p), hybgdd(ivt(p)))
@@ -2548,9 +2554,15 @@ contains
                       ivt(p) == nsugarcane .or. ivt(p) == nirrig_sugarcane) then
                      gddmaturity(p) = max(950._r8, min(gdd820(p)*0.85_r8, hybgdd(ivt(p))))
                   end if
+                  ! tboas: sugar beet and potato use hybgdd directly. The
+                  ! min(gdd020,...) form caps maturity at the climatological
+                  ! annual GDD (~1400 at Selhausen), forcing a ~90-day season
+                  ! and a July lift instead of the observed Apr-Oct season.
+                  if (ivt(p) == nsugarbeet .or. ivt(p) == nirrig_sugarbeet .or. &
+                      ivt(p) == npotatoes  .or. ivt(p) == nirrig_potatoes) then
+                     gddmaturity(p) = hybgdd(ivt(p))
+                  end if
                   if (ivt(p) == nswheat .or. ivt(p) == nirrig_swheat .or. &
-                      ivt(p) == nsugarbeet .or. ivt(p) == nirrig_sugarbeet .or. &
-                      ivt(p) == npotatoes .or. ivt(p) == nirrig_potatoes .or. &
                       ivt(p) == ncotton .or. ivt(p) == nirrig_cotton .or. &
                       ivt(p) == nrice   .or. ivt(p) == nirrig_rice) then
                      gddmaturity(p) = min(gdd020(p), hybgdd(ivt(p)))

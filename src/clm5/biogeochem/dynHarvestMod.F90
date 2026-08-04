@@ -277,11 +277,18 @@ contains
        return
     end if
 
-    ! ---- Sep 1: sow next year's autumn crop / cover crop -----------------
-    if (curr_mon == 9 .and. curr_day == 1) then
+    ! ---- Sep 1 / Oct 15 / Nov 15: sow next year's autumn crop ------------
+    ! tboas: three attempts, not one. A late-lifted root crop (sugar beet now
+    ! matures in Sep-Oct) is still croplive on Sep 1, so that attempt skips.
+    ! Without a retry the winter crop was never sown and the following year
+    ! grew nothing at all. Winter wheat/barley plant until Nov 30, so an
+    ! October lift still leaves time to establish.
+    if ((curr_mon == 9  .and. curr_day ==  1) .or. &
+        (curr_mon == 10 .and. curr_day == 15) .or. &
+        (curr_mon == 11 .and. curr_day == 15)) then
        if (crop_inst%croplive_patch(p)) then
-          write(iulog,*) 'CCROT: Sep1 skip, crop still live p=',p, &
-               ' itype=',patch%itype(p)
+          write(iulog,*) 'CCROT: autumn sow skipped, crop still live p=',p, &
+               ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
           return
        end if
        target_ivt = covercrop_target_ivt(p, use_next=.true.)
@@ -293,7 +300,7 @@ contains
        ! CropPhenology re-sow the OLD crop in autumn, which was then ploughed in
        ! on Mar 31 having produced nothing (2013/14 wasted winter wheat).
        if (target_ivt /= patch%itype(p)) then
-          write(iulog,*) 'CCROT: Sep1 switch p=',p, &
+          write(iulog,*) 'CCROT: autumn sow p=',p,' mon=',curr_mon,' day=',curr_day, &
                ' itype=',patch%itype(p),' target=',target_ivt, &
                ' mnNHplantdate=',pftcon%mnNHplantdate(target_ivt)
           call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
