@@ -11,3 +11,7 @@ src/externals/mct/config.status
 *.py[cod]
 build
 bld
+*.bak_*
+build.log
+build_output.log
+install/

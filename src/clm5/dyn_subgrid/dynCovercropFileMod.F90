@@ -196,17 +196,19 @@ contains
     cnveg_state_inst%idop_patch(p)       = NOT_Planted
     ! Reset phenology GDD state so new crop starts fresh --- tboas
     crop_inst%gddplant_patch(p)              = 0._r8
-    cnveg_state_inst%huigrain_patch(p)       = 0._r8
-    cnveg_state_inst%gddmaturity_patch(p)    = 0._r8
+    ! tboas: huigrain/gddmaturity NOT zeroed — CropPhenology derives them at
+    ! planting; zeroing them makes 'hui < huigrain' impossible and locks the
+    ! crop out of phase 2 permanently.
+    ! cnveg_state_inst%huigrain_patch(p)       = 0._r8
+    ! cnveg_state_inst%gddmaturity_patch(p)    = 0._r8
     crop_inst%harvdate_patch(p)              = NOT_Planted
     crop_inst%cphase_patch(p)                = 0._r8
-    ! Reset phenology onset/offset flags --- tboas
-    cnveg_state_inst%onset_flag_patch(p)     = 0._r8
-    cnveg_state_inst%onset_counter_patch(p)  = 0._r8
-    cnveg_state_inst%offset_flag_patch(p)    = 0._r8
-    cnveg_state_inst%offset_counter_patch(p) = 0._r8
-    cnveg_state_inst%offset2_flag_patch(p)   = 0._r8
-    cnveg_state_inst%dormant_flag_patch(p)   = 1._r8
+    ! tboas: peaklai MUST be reset — if it carries over as 1 from the previous
+    ! crop, CNPhenologyMod line ~2731 clamps hui up to huigrain on the first
+    ! live timestep, making 'hui < huigrain' permanently false and locking the
+    ! new crop out of phase 2 (no leaf emergence, no onset, leafc_xfer never drains).
+    cnveg_state_inst%peaklai_patch(p)        = 0
+    ! onset/offset flags NOT reset — onset_counter must go negative for crop onset to fire --- tboas
     ! Zero xsmrpool to prevent carbon debt from previous crop --- tboas
     cnveg_carbonstate_inst%xsmrpool_patch(p) = 0._r8
     ! tboas: C/N pools kept from previous crop; C balance tolerance relaxed in CNBalanceCheckMod
