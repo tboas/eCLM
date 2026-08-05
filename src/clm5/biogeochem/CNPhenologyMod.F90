@@ -96,7 +96,6 @@ module CNPhenologyMod
   real(r8), private :: initial_seed_at_planting = 3._r8 ! Initial seed at planting
 
   ! tboas: manure carbon parameters
-  real(r8), parameter :: manure_lignin_frac = 0.10_r8   ! lignin fraction of manure C for litter partitioning
 
   character(len=*), parameter, private :: sourcefile = &
        __FILE__
