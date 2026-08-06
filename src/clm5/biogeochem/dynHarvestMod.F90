@@ -244,6 +244,8 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer :: target_ivt
+    integer :: next_ivt      ! tboas
+    integer :: mmdd          ! tboas: date as month*100 + day
     !------------------------------------------------------------------------
 
     if (.not. use_covercropping) return
@@ -277,34 +279,99 @@ contains
        return
     end if
 
-    ! ---- Sep 1 / Oct 15 / Nov 15: sow next year's autumn crop ------------
-    ! tboas: three attempts, not one. A late-lifted root crop (sugar beet now
-    ! matures in Sep-Oct) is still croplive on Sep 1, so that attempt skips.
-    ! Without a retry the winter crop was never sown and the following year
-    ! grew nothing at all. Winter wheat/barley plant until Nov 30, so an
-    ! October lift still leaves time to establish.
-    if ((curr_mon == 9  .and. curr_day ==  1) .or. &
-        (curr_mon == 10 .and. curr_day == 15) .or. &
+    ! ---- cover-crop sowing: four attempts, gated by the crop's own window --
+    ! tboas: the cover crop for the coming winter is taken from PCT_CFT_WINTER
+    ! of the CURRENT year. Rather than hardcoding when each cover crop may be
+    ! sown, every attempt is tested against that PFT's own planting window from
+    ! the parameter file. An early catch crop (window 0801-0930) is therefore
+    ! sown after a cereal; a late one (window 0901-1130) can follow a root crop
+    ! lifted in October. Which is used is decided in the land-use file.
+    if ((curr_mon ==  8 .and. curr_day == 15) .or. &
+        (curr_mon ==  9 .and. curr_day ==  1) .or. &
+        (curr_mon == 10 .and. curr_day ==  1) .or. &
+        (curr_mon == 10 .and. curr_day == 20)) then
+
+       if (crop_inst%croplive_patch(p)) then
+          write(iulog,*) 'CCROT: cover-crop sowing skipped, crop live p=',p, &
+               ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
+          return
+       end if
+
+       target_ivt = covercrop_target_ivt(p, use_next=.false., use_winter=.true.)
+       if (target_ivt <= 0) return          ! no cover crop this winter
+
+       ! date as MMDD, matching the parameter-file convention
+       mmdd = curr_mon * 100 + curr_day
+       if (mmdd < pftcon%mnNHplantdate(target_ivt) .or. &
+           mmdd > pftcon%mxNHplantdate(target_ivt)) then
+          write(iulog,*) 'CCROT: cover-crop sowing outside its window p=',p, &
+               ' mmdd=',mmdd,' target=',target_ivt, &
+               ' window=',pftcon%mnNHplantdate(target_ivt), &
+               pftcon%mxNHplantdate(target_ivt)
+          return
+       end if
+
+       ! a late sowing must not occupy the patch when an autumn-sown main crop
+       ! is due in November
+       if (curr_mon >= 10) then
+          next_ivt = covercrop_target_ivt(p, use_next=.true.)
+          if (next_ivt > 0) then
+             if (pftcon%mnNHplantdate(next_ivt) > 700) then
+                write(iulog,*) 'CCROT: late cover crop suppressed, autumn-sown ', &
+                     'main crop follows p=',p,' next=',next_ivt
+                return
+             end if
+          end if
+       end if
+
+       if (target_ivt /= patch%itype(p)) then
+          write(iulog,*) 'CCROT: sow cover crop p=',p,' mon=',curr_mon, &
+               ' day=',curr_day,' itype=',patch%itype(p),' target=',target_ivt
+          call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
+               cnveg_carbonstate_inst, use_next=.false., use_winter=.true.)
+       end if
+       return
+    end if
+
+    ! ---- 15 Oct: clear a cover crop ahead of an autumn-sown main crop ------
+    ! tboas: only fires when next year's crop is itself autumn-sown, i.e. the
+    ! summer -> cover crop -> winter cereal sequence. For a spring successor the
+    ! cover crop is left standing and terminated on 31 March instead.
+    if (curr_mon == 10 .and. curr_day == 15) then
+       target_ivt = covercrop_target_ivt(p, use_next=.true.)
+       if (target_ivt <= 0) return
+       if (pftcon%mnNHplantdate(target_ivt) > 700) then
+          if (crop_inst%croplive_patch(p) .and. target_ivt /= patch%itype(p)) then
+             write(iulog,*) 'CCROT: Oct15 clear cover crop ahead of winter crop p=',p, &
+                  ' itype=',patch%itype(p),' target=',target_ivt
+             cnveg_state_inst%gddmaturity_patch(p) = 0._r8
+             cnveg_state_inst%huigrain_patch(p)    = 0._r8
+          end if
+       end if
+       return
+    end if
+
+    ! ---- 1 Nov / 15 Nov: sow next year's autumn-sown crop ------------------
+    if ((curr_mon == 11 .and. curr_day ==  1) .or. &
         (curr_mon == 11 .and. curr_day == 15)) then
        if (crop_inst%croplive_patch(p)) then
-          write(iulog,*) 'CCROT: autumn sow skipped, crop still live p=',p, &
+          write(iulog,*) 'CCROT: autumn sow skipped, crop live p=',p, &
                ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
           return
        end if
        target_ivt = covercrop_target_ivt(p, use_next=.true.)
        if (target_ivt <= 0) return
-       ! tboas: switch unconditionally to next year's crop. An autumn-sown crop
-       ! establishes inside its own Sep-Nov window; a spring-sown crop cannot
-       ! plant in September, so the patch stays genuinely bare over winter and
-       ! the Apr 1 branch becomes a no-op. Leaving itype unchanged instead let
-       ! CropPhenology re-sow the OLD crop in autumn, which was then ploughed in
-       ! on Mar 31 having produced nothing (2013/14 wasted winter wheat).
-       if (target_ivt /= patch%itype(p)) then
-          write(iulog,*) 'CCROT: autumn sow p=',p,' mon=',curr_mon,' day=',curr_day, &
-               ' itype=',patch%itype(p),' target=',target_ivt, &
-               ' mnNHplantdate=',pftcon%mnNHplantdate(target_ivt)
-          call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
-               cnveg_carbonstate_inst, use_next=.true.)
+       ! only sow here if the crop is autumn-sown; a spring successor is left
+       ! to the 1 April branch and the patch overwinters bare
+       if (pftcon%mnNHplantdate(target_ivt) > 700) then
+          if (target_ivt /= patch%itype(p)) then
+             write(iulog,*) 'CCROT: autumn sow p=',p,' mon=',curr_mon, &
+                  ' day=',curr_day,' itype=',patch%itype(p), &
+                  ' target=',target_ivt, &
+                  ' mnNHplantdate=',pftcon%mnNHplantdate(target_ivt)
+             call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
+                  cnveg_carbonstate_inst, use_next=.true.)
+          end if
        end if
        return
     end if

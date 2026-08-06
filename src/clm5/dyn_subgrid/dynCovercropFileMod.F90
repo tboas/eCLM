@@ -51,6 +51,8 @@ module dynCovercropFileMod
   type(dyn_file_type), target :: dyncovercrop_file
   real(r8), allocatable :: pct_cft_cur (:,:)  ! (begg:endg, cft_size)
   real(r8), allocatable :: pct_cft_next(:,:)  ! (begg:endg, cft_size)
+  real(r8), allocatable :: pct_cft_winter(:,:)  ! (begg:endg, cft_size) tboas
+  logical               :: has_winter_slot = .false.  ! tboas
   real(r8), pointer :: active_ivt_patch(:) => null() ! (begp:endp) active itype for history  ! tboas
 
   character(len=*), parameter, private :: sourcefile = __FILE__
@@ -84,8 +86,10 @@ contains
     pct_cft_shape = [num_points, cft_size]
     allocate(pct_cft_cur (bounds%begg:bounds%endg, cft_size))
     allocate(pct_cft_next(bounds%begg:bounds%endg, cft_size))
-    pct_cft_cur  = 0._r8
-    pct_cft_next = 0._r8
+    allocate(pct_cft_winter(bounds%begg:bounds%endg, cft_size))
+    pct_cft_cur    = 0._r8
+    pct_cft_next   = 0._r8
+    pct_cft_winter = 0._r8
     call dyncovercrop_interp(bounds)
 
     ! Register IVT as history field for rotation diagnostics --- tboas
@@ -143,6 +147,21 @@ contains
        if (masterproc) write(iulog,*) "dyncovercrop_interp: end of timeseries, using current year for pct_cft_next"
     end if
     deallocate(raw_next)
+
+    ! tboas: optional winter cover-crop slot, read at the CURRENT year index.
+    ! PCT_CFT_WINTER(year N) is the cover crop sown in autumn of year N.
+    allocate(raw_next(num_points, cft_size))
+    call ncd_io(varname="PCT_CFT_WINTER", data=raw_next, dim1name=grlnd, &
+         flag="read", ncid=dyncovercrop_file, &
+         nt=dyncovercrop_file%time_info%get_time_index_lower(), readvar=readvar)
+    if (readvar) then
+       pct_cft_winter(bounds%begg:bounds%endg, :) = raw_next * 100._r8
+       has_winter_slot = .true.
+    else
+       pct_cft_winter(bounds%begg:bounds%endg, :) = 0._r8
+       has_winter_slot = .false.
+    end if
+    deallocate(raw_next)
     ! Update IVT history field with current patch itype --- tboas
     if (associated(active_ivt_patch)) then
        do pi = bounds%begp, bounds%endp
@@ -153,11 +172,12 @@ contains
   end subroutine dyncovercrop_interp
 
   !-----------------------------------------------------------------------
-  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst, use_next)
+  subroutine covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, cnveg_carbonstate_inst, use_next, use_winter)
     use CropType              , only : crop_type
     use CNVegStateType        , only : cnveg_state_type
     integer               , intent(in)    :: p
     logical               , intent(in)    :: use_next  ! .true. = use pct_cft_next
+    logical               , intent(in), optional :: use_winter  ! tboas
     type(crop_type)       , intent(inout) :: crop_inst
     type(cnveg_state_type), intent(inout) :: cnveg_state_inst
     type(cnveg_carbonstate_type), intent(inout) :: cnveg_carbonstate_inst
@@ -166,7 +186,7 @@ contains
     !-----------------------------------------------------------------------
     if (.not. use_covercropping)       return
     if (.not. allocated(pct_cft_cur)) return
-    new_ivt = covercrop_target_ivt(p, use_next)
+    new_ivt = covercrop_target_ivt(p, use_next, use_winter)
     if (new_ivt <= 0) return
     write(iulog,*) 'SWITCH_DEBUG: new_ivt=',new_ivt,' patch%itype=',patch%itype(p),' use_next=',use_next  ! tboas
     if (new_ivt == patch%itype(p)) return
@@ -203,15 +223,19 @@ contains
   end subroutine covercrop_switch_ivt
 
   !-----------------------------------------------------------------------
-  integer function covercrop_target_ivt(p, use_next)
+  integer function covercrop_target_ivt(p, use_next, use_winter)
     ! tboas: return the dominant CFT for patch p as a global PFT index.
     ! Returns -1 if covercropping is off or the arrays are not allocated.
     integer, intent(in) :: p
     logical, intent(in) :: use_next   ! .true. = pct_cft_next, .false. = pct_cft_cur
+    logical, intent(in), optional :: use_winter  ! tboas: PCT_CFT_WINTER slot
     integer  :: g, cft, best_cft
     real(r8) :: best_pct
+    logical  :: want_winter
     !-----------------------------------------------------------------------
     covercrop_target_ivt = -1
+    want_winter = .false.
+    if (present(use_winter)) want_winter = use_winter .and. has_winter_slot
     if (.not. use_covercropping)      return
     if (.not. allocated(pct_cft_cur)) return
     if (use_next .and. .not. allocated(pct_cft_next)) return
@@ -219,7 +243,12 @@ contains
     best_cft = 1
     best_pct = -1._r8
     do cft = 1, cft_size
-       if (use_next) then
+       if (want_winter) then
+          if (pct_cft_winter(g, cft) > best_pct) then
+             best_pct = pct_cft_winter(g, cft)
+             best_cft = cft
+          end if
+       else if (use_next) then
           if (pct_cft_next(g, cft) > best_pct) then
              best_pct = pct_cft_next(g, cft)
              best_cft = cft
@@ -231,6 +260,8 @@ contains
           end if
        end if
     end do
+    ! tboas: an empty slot yields no target
+    if (best_pct <= 0._r8) return
     ! cft_lb = first crop PFT index = natpft_ub + 1
     covercrop_target_ivt = cft_lb + best_cft - 1
   end function covercrop_target_ivt
