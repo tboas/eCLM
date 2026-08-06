@@ -15,6 +15,7 @@ module CNVegCarbonFluxType
   use clm_varcon                         , only : spval, dzsoi_decomp
   use clm_varctl                         , only : use_cndv, use_c13, use_nitrif_denitrif, use_crop
   use clm_varctl                         , only : use_grainproduct
+  use pftconMod                          , only : is_covercrop  ! tboas
   use clm_varctl                         , only : iulog
   use clm_varctl                         , only : use_cfert  ! tboas: namelist flag for organic C fertilizer
   use landunit_varcon                    , only : istsoil, istcrop, istdlak 
@@ -4361,7 +4362,9 @@ contains
                this%livestemc_to_litter_patch(p) + &
                this%prunec_to_litter_patch(p) + &
                this%prunec_storage_to_litter_patch(p) 
-          if (.not. use_grainproduct) then
+          ! tboas: per patch, so a cover crop routes its grain C to litter
+          ! regardless of the domain-wide namelist setting
+          if (.not. use_grainproduct .or. is_covercrop(patch%itype(p))) then
              this%litfall_patch(p) = &
                   this%litfall_patch(p) + &
                   this%grainc_to_food_patch(p)

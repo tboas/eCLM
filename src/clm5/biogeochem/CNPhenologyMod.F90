@@ -4139,6 +4139,7 @@ contains
     ! !USES:
     use clm_varctl    , only : use_crop
     use clm_varctl    , only : use_grainproduct
+    use pftconMod     , only : is_covercrop  ! tboas
     use subgridAveMod , only : p2c
     !
     ! !ARGUMENTS:
@@ -4162,6 +4163,9 @@ contains
     if (use_crop .and. use_grainproduct) then
        do fp = 1, num_soilp
           p = filter_soilp(fp)
+          ! tboas: cover crops contribute no crop product; their grain carbon
+          ! is routed to litter instead (see the phenology litter block)
+          if (is_covercrop(patch%itype(p))) cycle
           cnveg_carbonflux_inst%grainc_to_cropprodc_patch(p) = &
                cnveg_carbonflux_inst%grainc_to_food_patch(p)
           cnveg_nitrogenflux_inst%grainn_to_cropprodn_patch(p) = &
@@ -4195,6 +4199,7 @@ contains
     use clm_varpar , only : max_patch_per_col,maxpatch_pft, nlevdecomp
     use pftconMod  , only : npcropmin
     use clm_varctl , only : use_grainproduct
+    use pftconMod  , only : is_covercrop  ! tboas
     !
     ! !ARGUMENTS:
     type(bounds_type)               , intent(in)    :: bounds
@@ -4346,8 +4351,9 @@ contains
 
                         end if
 
-                        if (.not. use_grainproduct) then
-                         ! grain litter carbon fluxes
+                        if (.not. use_grainproduct .or. is_covercrop(ivt(p))) then
+                         ! grain litter carbon fluxes  --- tboas: cover crop
+                         ! grain is ploughed in, never a crop product
                          phenology_c_to_litr_met_c(c,j) = phenology_c_to_litr_met_c(c,j) &
                               + grainc_to_food(p) * lf_flab(ivt(p)) * wtcol(p) * leaf_prof(p,j)
                          phenology_c_to_litr_cel_c(c,j) = phenology_c_to_litr_cel_c(c,j) &

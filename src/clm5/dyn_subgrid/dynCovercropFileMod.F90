@@ -36,7 +36,6 @@ module dynCovercropFileMod
   use spmdMod                 , only : masterproc
   use PatchType               , only : patch
   use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2
-  use clm_varctl              , only : use_grainproduct
   !
   implicit none
   private
@@ -53,6 +52,7 @@ module dynCovercropFileMod
   real(r8), allocatable :: pct_cft_next(:,:)  ! (begg:endg, cft_size)
   real(r8), allocatable :: pct_cft_winter(:,:)  ! (begg:endg, cft_size) tboas
   logical               :: has_winter_slot = .false.  ! tboas
+  integer               :: last_year_index = -1       ! tboas: read cache
   real(r8), pointer :: active_ivt_patch(:) => null() ! (begp:endp) active itype for history  ! tboas
 
   character(len=*), parameter, private :: sourcefile = __FILE__
@@ -110,58 +110,67 @@ contains
     type(dyn_var_time_uninterp_type) :: wtcft_obj
     integer :: num_points, pct_cft_shape(2), pi
     integer :: idx_next, ntimes
+    integer :: cur_year_index  ! tboas
     real(r8), pointer :: raw_next(:,:)  ! (lndgrid, cft) pointer for ncd_io_2d
     logical :: readvar
     !-----------------------------------------------------------------------
     if (.not. use_covercropping)       return
     if (.not. allocated(pct_cft_cur))  return
     call dyncovercrop_file%time_info%set_current_year()
-    num_points    = bounds%endg - bounds%begg + 1
-    pct_cft_shape = [num_points, cft_size]
 
-    ! Read current year PCT_CFT via standard mechanism
-    wtcft_obj = dyn_var_time_uninterp_type( &
-         dyn_file              = dyncovercrop_file, &
-         varname               = "PCT_CFT", &
-         dim1name              = grlnd, &
-         conversion_factor     = 100._r8, &
-         do_check_sums_equal_1 = .false., &
-         data_shape            = pct_cft_shape)
-    call wtcft_obj%get_current_data(pct_cft_cur(bounds%begg:bounds%endg, :))
+    ! tboas: the file only changes when the year index changes. Without this
+    ! guard the slices below are re-read on every timestep -- 17520 reads per
+    ! simulated year at dtime=1800s, which dominates runtime on a regional grid.
+    cur_year_index = dyncovercrop_file%time_info%get_time_index_lower()
+    if (cur_year_index /= last_year_index) then
+       num_points    = bounds%endg - bounds%begg + 1
+       pct_cft_shape = [num_points, cft_size]
 
-    ! Read next year PCT_CFT directly via ncd_io_2d at time_index_lower + 1
-    ! This is needed for post-harvest planting of winter crops/cover crops
-    ! which are sown in fall of current year but belong to next year's rotation
-    ntimes   = dyncovercrop_file%time_info%get_time_index_upper()
-    idx_next = min(dyncovercrop_file%time_info%get_time_index_lower() + 1, ntimes)
-    nullify(raw_next)
-    allocate(raw_next(num_points, cft_size))
-    raw_next => raw_next
-    call ncd_io(varname="PCT_CFT", data=raw_next, dim1name=grlnd, &
-         flag="read", ncid=dyncovercrop_file, nt=idx_next, readvar=readvar)
-    if (readvar) then
-       pct_cft_next(bounds%begg:bounds%endg, :) = raw_next * 100._r8
-    else
-       ! Fallback: end of timeseries — use current year
-       pct_cft_next(bounds%begg:bounds%endg, :) = pct_cft_cur(bounds%begg:bounds%endg, :)
-       if (masterproc) write(iulog,*) "dyncovercrop_interp: end of timeseries, using current year for pct_cft_next"
+       ! Read current year PCT_CFT via standard mechanism
+       wtcft_obj = dyn_var_time_uninterp_type( &
+            dyn_file              = dyncovercrop_file, &
+            varname               = "PCT_CFT", &
+            dim1name              = grlnd, &
+            conversion_factor     = 100._r8, &
+            do_check_sums_equal_1 = .false., &
+            data_shape            = pct_cft_shape)
+       call wtcft_obj%get_current_data(pct_cft_cur(bounds%begg:bounds%endg, :))
+
+       ! Read next year PCT_CFT directly via ncd_io_2d at time_index_lower + 1
+       ! This is needed for post-harvest planting of winter crops/cover crops
+       ! which are sown in fall of current year but belong to next year's rotation
+       ntimes   = dyncovercrop_file%time_info%get_time_index_upper()
+       idx_next = min(dyncovercrop_file%time_info%get_time_index_lower() + 1, ntimes)
+       nullify(raw_next)
+       allocate(raw_next(num_points, cft_size))
+       call ncd_io(varname="PCT_CFT", data=raw_next, dim1name=grlnd, &
+            flag="read", ncid=dyncovercrop_file, nt=idx_next, readvar=readvar)
+       if (readvar) then
+          pct_cft_next(bounds%begg:bounds%endg, :) = raw_next * 100._r8
+       else
+          ! Fallback: end of timeseries — use current year
+          pct_cft_next(bounds%begg:bounds%endg, :) = pct_cft_cur(bounds%begg:bounds%endg, :)
+          if (masterproc) write(iulog,*) "dyncovercrop_interp: end of timeseries, using current year for pct_cft_next"
+       end if
+       deallocate(raw_next)
+
+       ! tboas: optional winter cover-crop slot, read at the CURRENT year index.
+       ! PCT_CFT_WINTER(year N) is the cover crop sown in autumn of year N.
+       allocate(raw_next(num_points, cft_size))
+       call ncd_io(varname="PCT_CFT_WINTER", data=raw_next, dim1name=grlnd, &
+            flag="read", ncid=dyncovercrop_file, &
+            nt=dyncovercrop_file%time_info%get_time_index_lower(), readvar=readvar)
+       if (readvar) then
+          pct_cft_winter(bounds%begg:bounds%endg, :) = raw_next * 100._r8
+          has_winter_slot = .true.
+       else
+          pct_cft_winter(bounds%begg:bounds%endg, :) = 0._r8
+          has_winter_slot = .false.
+       end if
+       deallocate(raw_next)
+       last_year_index = cur_year_index
     end if
-    deallocate(raw_next)
 
-    ! tboas: optional winter cover-crop slot, read at the CURRENT year index.
-    ! PCT_CFT_WINTER(year N) is the cover crop sown in autumn of year N.
-    allocate(raw_next(num_points, cft_size))
-    call ncd_io(varname="PCT_CFT_WINTER", data=raw_next, dim1name=grlnd, &
-         flag="read", ncid=dyncovercrop_file, &
-         nt=dyncovercrop_file%time_info%get_time_index_lower(), readvar=readvar)
-    if (readvar) then
-       pct_cft_winter(bounds%begg:bounds%endg, :) = raw_next * 100._r8
-       has_winter_slot = .true.
-    else
-       pct_cft_winter(bounds%begg:bounds%endg, :) = 0._r8
-       has_winter_slot = .false.
-    end if
-    deallocate(raw_next)
     ! Update IVT history field with current patch itype --- tboas
     if (associated(active_ivt_patch)) then
        do pi = bounds%begp, bounds%endp
@@ -214,12 +223,10 @@ contains
     ! Zero xsmrpool to prevent carbon debt from previous crop --- tboas
     cnveg_carbonstate_inst%xsmrpool_patch(p) = 0._r8
     ! tboas: C/N pools kept from previous crop; C balance tolerance relaxed in CNBalanceCheckMod
-    ! Suppress grain product accounting for cover crops
-    if (new_ivt == ncovercrop_1 .or. new_ivt == ncovercrop_2) then
-       use_grainproduct = .false.
-    else
-       use_grainproduct = .true.
-    end if
+    ! tboas: use_grainproduct is a namelist flag and is NOT rewritten here.
+    ! Mutating it made the last patch switched determine the setting for the
+    ! whole domain. Grain-product suppression for cover crops is now decided
+    ! per patch at the point of use, via pftconMod::is_covercrop.
   end subroutine covercrop_switch_ivt
 
   !-----------------------------------------------------------------------

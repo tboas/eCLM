@@ -200,12 +200,35 @@ contains
     if (.not. use_covercropping) return
     call get_curr_date(curr_yr, curr_mon, curr_day, curr_sec)
 
+    ! tboas: nothing happens except on a switch date and only on the first
+    ! timestep of that day. Testing here rather than inside the patch routine
+    ! avoids walking every patch on every timestep.
+    if (curr_sec >= int(get_step_size())) return
+    if (.not. is_rotation_switch_date(curr_mon, curr_day)) return
+
     do p = bounds%begp, bounds%endp
        call covercropping_update_patch(p, curr_mon, curr_day, curr_sec, &
             crop_inst, cnveg_state_inst, cnveg_carbonstate_inst)
     end do
 
   end subroutine covercropping_update
+
+  !-----------------------------------------------------------------------
+  logical function is_rotation_switch_date(mon, day)
+    ! tboas: every date on which the rotation logic can act.
+    ! Keep in step with the branches in covercropping_update_patch.
+    integer, intent(in) :: mon, day
+    is_rotation_switch_date = &
+         (mon ==  3 .and. day == 31) .or. &   ! terminate cover crop
+         (mon ==  4 .and. day ==  1) .or. &   ! switch to this year's crop
+         (mon ==  8 .and. day == 15) .or. &   ! sow cover crop
+         (mon ==  9 .and. day ==  1) .or. &   ! sow cover crop
+         (mon == 10 .and. day ==  1) .or. &   ! sow cover crop, late window
+         (mon == 10 .and. day == 15) .or. &   ! clear cover crop before winter crop
+         (mon == 10 .and. day == 20) .or. &   ! sow cover crop, last attempt
+         (mon == 11 .and. day ==  1) .or. &   ! sow autumn-sown main crop
+         (mon == 11 .and. day == 15)          ! second attempt
+  end function is_rotation_switch_date
 
   !-----------------------------------------------------------------------
   subroutine covercropping_update_patch(p, curr_mon, curr_day, curr_sec, &

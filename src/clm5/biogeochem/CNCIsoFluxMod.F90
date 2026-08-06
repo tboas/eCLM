@@ -20,6 +20,7 @@ module CNCIsoFluxMod
   use PatchType                          , only : patch                
   use clm_varctl                         , only : use_crop
   use clm_varctl                         , only : use_grainproduct
+  use pftconMod                          , only : is_covercrop  ! tboas
   !
   implicit none
   private
@@ -473,6 +474,8 @@ contains
          if (use_grainproduct) then
             do fp = 1,num_soilp
                p = filter_soilp(fp)
+               ! tboas: cover crops contribute no crop product
+               if (is_covercrop(patch%itype(p))) cycle
                iso_cnveg_cf%grainc_to_cropprodc_patch(p) = iso_cnveg_cf%grainc_to_food_patch(p)
                iso_cnveg_cf%grain_mr_patch(p) = iso_cnveg_cf%grain_xsmr_patch(p) + iso_cnveg_cf%grain_curmr_patch(p)
             end do
@@ -1244,8 +1247,8 @@ contains
                         phenology_c_to_litr_lig_c(c,j) = phenology_c_to_litr_lig_c(c,j) &
                              + livestemc_to_litter(p) * lf_flig(ivt(p)) * wtcol(p) * leaf_prof(p,j)
 
-                        if (.not. use_grainproduct) then
-                         ! grain litter carbon fluxes
+                        if (.not. use_grainproduct .or. is_covercrop(ivt(p))) then
+                         ! grain litter carbon fluxes  --- tboas
                            phenology_c_to_litr_met_c(c,j) = phenology_c_to_litr_met_c(c,j) &
                               + grainc_to_food(p) * lf_flab(ivt(p)) * wtcol(p) * leaf_prof(p,j)
                            phenology_c_to_litr_cel_c(c,j) = phenology_c_to_litr_cel_c(c,j) &

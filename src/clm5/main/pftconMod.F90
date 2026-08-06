@@ -295,6 +295,8 @@ module pftconMod
 
   type(pftcon_type), public :: pftcon ! pft type constants structure
 
+  public :: is_covercrop   ! tboas
+
   integer, parameter :: pftname_len = 40         ! max length of pftname
   character(len=pftname_len) :: pftname(0:mxpft) ! PFT description
 
@@ -1589,6 +1591,21 @@ contains
     deallocate( this%covercrop)
 
   end subroutine Clean
+
+  !-----------------------------------------------------------------------
+  logical function is_covercrop(ivt)
+    ! tboas: true if this PFT is a cover crop. Used instead of mutating the
+    ! global use_grainproduct flag, which is a namelist setting and must not
+    ! be rewritten per patch.
+    integer, intent(in) :: ivt
+    is_covercrop = .false.
+    if (ncovercrop_1 > 0) then
+       if (ivt == ncovercrop_1) is_covercrop = .true.
+    end if
+    if (ncovercrop_2 > 0) then
+       if (ivt == ncovercrop_2) is_covercrop = .true.
+    end if
+  end function is_covercrop
 
 end module pftconMod
 
