@@ -3030,11 +3030,13 @@ contains
             cumvd(p) = cumvd(p) - 0.5_r8 * (t_ref2m_max(p) - tfrz - 30._r8)
          end if
          cumvd(p) = max(0._r8, cumvd(p))       ! must be > 0
-         write(iulog,*)'vernalization_old cumvd(p)=', cumvd(p)
+         ! tboas: debug write disabled for regional runs
+         !write(iulog,*)'vernalization_old cumvd(p)=', cumvd(p)
 
          vf(p) = 1._r8 - p1v * (50._r8 - cumvd(p))
          vf(p) = max(0._r8, min(vf(p), 1._r8)) ! must be between 0 - 1
-         write(iulog,*)'vernalization_old vf(p)=', vf(p)
+         ! tboas: debug write disabled for regional runs
+         !write(iulog,*)'vernalization_old vf(p)=', vf(p)
       end if
 
       ! calculate cold hardening of plant
@@ -3180,8 +3182,10 @@ contains
       dtime=dt/3600.0_r8  !dtime is the time step in hour
 
       alpha=log(2._r8)/(log((vtmax-vtmin)/(vtopt-vtmin)))
-      write(iulog,*) 'alpha=',alpha
-      write(iulog,*) 'tcrown=',tcrown(p)
+      ! tboas: debug write disabled for regional runs
+      !write(iulog,*) 'alpha=',alpha
+      ! tboas: debug write disabled for regional runs
+      !write(iulog,*) 'tcrown=',tcrown(p)
       !tc = t_ref2m(p)-tfrz
       if(tcrown(p) >=vtmin .and. tcrown(p) <= vtmax) then
        cumvd(p)=cumvd(p) + ((2._r8*((tcrown(p)-vtmin)**alpha)*(vtopt-vtmin)**alpha &
@@ -3189,12 +3193,15 @@ contains
       end if
       cumvd(p) = max(0._r8, cumvd(p))       ! must be > 0
 
-      write(iulog,*)'vernalization_2 cumvd(p)=', cumvd(p)
+      ! tboas: debug write disabled for regional runs
+      !write(iulog,*)'vernalization_2 cumvd(p)=', cumvd(p)
       vf(p)=(cumvd(p)**5._r8)/(22.5_r8**5._r8+cumvd(p)**5._r8)
       vf(p) = max(0._r8, min(vf(p), 1._r8)) ! must be between 0 - 1
-      write(iulog,*)'vernalization_2 vf(p)=', vf(p)
+      ! tboas: debug write disabled for regional runs
+      !write(iulog,*)'vernalization_2 vf(p)=', vf(p)
 
-    write(iulog,*)'vernalization_2 cpool_to_grainc(p),hui(p) ',hui(p),cpool_to_grainc(p)
+    ! tboas: debug write disabled for regional runs
+    !write(iulog,*)'vernalization_2 cpool_to_grainc(p),hui(p) ',hui(p),cpool_to_grainc(p)
 
     end associate
 
@@ -3302,8 +3309,10 @@ contains
 
         if(tcrown(p) < 10._r8) then
            rateh(p)=Hparam*(10._r8-tcrown(p))*(lt50(p)-lt50max)
-           write(iulog,*) 'rateh=',rateh(p),'lt50=',lt50(p),'tcrown=',tcrown(p)
-           write(iulog,*) 'snow_depth=',snow_depth(c)
+           ! tboas: debug write disabled for regional runs
+           !write(iulog,*) 'rateh=',rateh(p),'lt50=',lt50(p),'tcrown=',tcrown(p)
+           ! tboas: debug write disabled for regional runs
+           !write(iulog,*) 'snow_depth=',snow_depth(c)
         end if
 
         if((tcrown(p) >=-4._r8 .and. vf(p) == 1._r8) .or. (tcrown(p)>=10._r8 .and. vf(p) <1._r8)) then

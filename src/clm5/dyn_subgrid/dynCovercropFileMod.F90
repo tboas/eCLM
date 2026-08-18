@@ -175,7 +175,8 @@ contains
     if (associated(active_ivt_patch)) then
        do pi = bounds%begp, bounds%endp
           active_ivt_patch(pi) = real(patch%itype(pi), r8)
-          if (pi == 2) write(iulog,*) 'IVT_TRACK: pi=',pi,' itype=',patch%itype(pi)  ! tboas
+          ! tboas: debug write disabled for regional runs
+          !if (pi == 2) write(iulog,*) 'IVT_TRACK: pi=',pi,' itype=',patch%itype(pi)  ! tboas
        end do
     end if
   end subroutine dyncovercrop_interp
