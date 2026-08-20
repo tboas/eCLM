@@ -268,7 +268,9 @@ contains
          use_nguardrail
     namelist /cfert_inparm/ manure_CN_ratio, manure_fmet, manure_fcel, manure_flig, &
          manure_injection_depth, manure_freq_years, manure_apply_month, &
-         manure_apply_day  ! tboas: manure C parameters
+         manure_apply_day, &  ! tboas: manure C parameters
+         manure_nh4_frac, &   ! tboas-fix: NH4-N fraction of applied manure N
+         cn_balance_tol_c, cn_balance_tol_n  ! tboas-fix: mass-balance tolerances
 
 
     ! ----------------------------------------------------------------------
@@ -618,6 +620,9 @@ contains
     call mpi_bcast (manure_freq_years,      1, MPI_INTEGER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_apply_month,     1, MPI_INTEGER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_apply_day,       1, MPI_INTEGER, 0, mpicom, ier)  ! tboas
+    call mpi_bcast (manure_nh4_frac,        1, MPI_REAL8, 0, mpicom, ier)  ! tboas-fix
+    call mpi_bcast (cn_balance_tol_c,       1, MPI_REAL8, 0, mpicom, ier)  ! tboas-fix
+    call mpi_bcast (cn_balance_tol_n,       1, MPI_REAL8, 0, mpicom, ier)  ! tboas-fix
     call mpi_bcast (use_ozone, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_snicar_frc, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_vancouver, 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -843,6 +848,17 @@ contains
     write(iulog,*) '    manure_freq_years= ',      manure_freq_years          ! tboas
     write(iulog,*) '    manure_apply_month= ',     manure_apply_month         ! tboas
     write(iulog,*) '    manure_apply_day= ',       manure_apply_day           ! tboas
+    write(iulog,*) '    manure_nh4_frac= ',        manure_nh4_frac            ! tboas-fix
+    write(iulog,*) '    cn_balance_tol_c= ',       cn_balance_tol_c           ! tboas-fix
+    write(iulog,*) '    cn_balance_tol_n= ',       cn_balance_tol_n           ! tboas-fix
+    if (manure_nh4_frac < 0.0_r8 .or. manure_nh4_frac > 1.0_r8) then
+       call endrun(msg='ERROR: manure_nh4_frac must lie between 0 and 1')
+    end if
+    if (cn_balance_tol_c > 1.e-6_r8 .or. cn_balance_tol_n > 1.e-6_r8) then
+       write(iulog,*) 'WARNING: C/N mass-conservation tolerances have been widened beyond'
+       write(iulog,*) '         the CLM5 defaults (1e-7). Conservation errors up to the'
+       write(iulog,*) '         values above will NOT abort the run. Do not use for production.'
+    end if
     if (abs(manure_fmet + manure_fcel + manure_flig - 1.0_r8) > 1.0e-6_r8) then
        call endrun(msg='ERROR: manure_fmet + manure_fcel + manure_flig must equal 1.0')
     end if

@@ -559,6 +559,18 @@ contains
                  ! update xsmrpool loss state
                  cs_veg%xsmrpool_loss_patch(p) = cs_veg%xsmrpool_loss_patch(p) - cf_veg%xsmrpool_to_atm_patch(p) * dt
                  
+              else if ( cs_veg%xsmrpool_loss_patch(p) /= 0._r8 ) then
+                 ! tboas-fix: a crop-rotation switch deposits the outgoing crop's
+                 ! xsmrpool into xsmrpool_loss (dynCovercropFileMod::covercrop_switch_ivt).
+                 ! With dribbling off, nothing else drains that pool, so the carbon
+                 ! would be stranded. Release it immediately, matching the
+                 ! non-dribbling behaviour used at harvest above. Note the flux is
+                 ! accumulated, not assigned, because the harvest branch may already
+                 ! have written to it in this timestep, and it may legitimately be
+                 ! negative when the previous crop ended with a respiration debt.
+                 cf_veg%xsmrpool_to_atm_patch(p) = cf_veg%xsmrpool_to_atm_patch(p) + &
+                      cs_veg%xsmrpool_loss_patch(p) / dt
+                 cs_veg%xsmrpool_loss_patch(p) = 0._r8
               end if
   
            end if

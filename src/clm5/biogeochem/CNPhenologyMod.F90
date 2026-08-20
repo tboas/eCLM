@@ -15,6 +15,8 @@ module CNPhenologyMod
   use shr_sys_mod                     , only : shr_sys_flush
   use decompMod                       , only : bounds_type
   use clm_varpar                      , only : numpft, nlevdecomp_full
+  use clm_varctl                      , only : debug_covercrop  ! tboas-fix
+  use clm_varctl                      , only : manure_nh4_frac  ! tboas-fix
   use clm_varctl                      , only : iulog, use_cndv, use_cfert, manure_CN_ratio, &
        manure_freq_years, manure_apply_month, manure_apply_day  ! tboas
   use clm_varcon                      , only : tfrz
@@ -2178,6 +2180,8 @@ contains
     real(r8) crmcorn  ! comparitive relative maturity for corn
     real(r8) ndays_on ! number of days to fertilize
     real(r8) :: manureC  ! tboas: organic carbon from manure based on fixed C:N ratio (gC/m2)
+    real(r8) :: manureN_tot  ! tboas-fix: total manure N offered to this patch this year (gN/m2)
+    logical  :: apply_manure ! tboas-fix: manure is applied in this year / on this date
     !------------------------------------------------------------------------
 
     associate(                                                                   &
@@ -2247,7 +2251,8 @@ contains
          fsurv             =>    crop_inst%fsurv_patch                  , & ! Output: [real(r8) (:)] winter wheat survival rate
          accfsurv          =>    crop_inst%accfsurv_patch               , & ! Output: [real(r8) (:)] accumulated winter wheat survival rate
          countfsurv        =>    crop_inst%countfsurv_patch             , & ! Output: [real(r8) (:)] numbers of accumulated winter wheat survival rate
-         fertC             =>    cnveg_carbonflux_inst%fertC_patch        & ! Output: [real(r8) (:)] (gC/m2/s) organic C fertilizer from manure (tboas)
+         fertC             =>    cnveg_carbonflux_inst%fertC_patch      , & ! Output: [real(r8) (:)] (gC/m2/s) organic C fertilizer from manure (tboas)
+         fertN             =>    cnveg_nitrogenflux_inst%fertN_patch      & ! Output: [real(r8) (:)] (gN/m2/s) organic N applied with manure (tboas-fix)
          )
 
       !variables for coldtolerance subroutine modified after Lu (2017) (tboas)
@@ -2366,7 +2371,9 @@ contains
                     jday                  >= minplantjday(ivt(p),h) .and. &
                     (gdd020(p)            /= spval                  .and. &
                     gdd020(p)             >= gddmin(ivt(p)))) then
-                  write (iulog,*) 'planting winter crop'
+                  if (debug_covercrop) then   ! tboas-fix
+                     write (iulog,*) 'planting winter crop'
+                  end if
                   cumvd(p)       = 0._r8
                   hdidx(p)       = 0._r8
                   vf(p)          = 0._r8
@@ -2418,7 +2425,9 @@ contains
                else if (jday       >=  maxplantjday(ivt(p),h) .and. &
                     gdd020(p)  /= spval                   .and. &
                     gdd020(p)  >= gddmin(ivt(p))) then
-                  write (iulog,*) 'planting winter crop'
+                  if (debug_covercrop) then   ! tboas-fix
+                     write (iulog,*) 'planting winter crop'
+                  end if
                   cumvd(p)       = 0._r8
                   hdidx(p)       = 0._r8
                   vf(p)          = 0._r8
@@ -2759,28 +2768,64 @@ contains
                   onset_flag(p)    = 1._r8
                   onset_counter(p) = dt
                   fert_counter(p)  = ndays_on * secspday
+                  ! tboas-fix: decide ONCE whether manure is applied in this year
+                  ! and on this date, then use that single decision for both the
+                  ! mineral and the organic part of the manure. Previously the
+                  ! frequency/date gate applied only to the carbon, so the manure
+                  ! nitrogen was applied every year even when the carbon was not.
+                  ! Check application frequency: apply only every manure_freq_years.
+                  ! Use kyr modulo so year 2009->1, 2010->2 etc; fires when remainder=1.
+                  ! Check timing: manure_apply_month=0 means apply at planting onset,
+                  ! >0 means only on that calendar date.
+                  apply_manure = .false.
+                  if (use_cfert .and. ndays_on > 0) then
+                     if (manure_freq_years <= 1 .or. &
+                         mod(kyr, manure_freq_years) == 1) then
+                        if (manure_apply_month == 0 .or. &
+                            (kmo == manure_apply_month .and. kda == manure_apply_day)) then
+                           apply_manure = .true.
+                        end if
+                     end if
+                  end if
+
+                  ! total manure N offered to this patch this year (gN/m2)
+                  manureN_tot = manunitro(ivt(p)) * 1000._r8
+
                   if (ndays_on .gt. 0) then
-                     fert(p) = (manunitro(ivt(p)) * 1000._r8 + fertnitro(p))/ fert_counter(p)
+                     if (use_cfert) then
+                        ! tboas-fix: with the organic-C pathway active, only the
+                        ! ammoniacal fraction of the manure N is immediately
+                        ! plant-available. The organic remainder travels with the
+                        ! manure C into the litter pools (CNCSoilFert) and is
+                        ! mineralised by the decomposition cascade, so it must NOT
+                        ! also be added to the mineral pool here. Before this fix
+                        ! the full manure N was added as mineral N AND the same N
+                        ! was used a second time, x manure_CN_ratio, to size an
+                        ! N-free carbon pulse.
+                        if (apply_manure) then
+                           fert(p) = (manureN_tot * manure_nh4_frac + fertnitro(p)) / fert_counter(p)
+                        else
+                           fert(p) = fertnitro(p) / fert_counter(p)
+                        end if
+                     else
+                        ! use_cfert = .false. : unchanged CLM5 behaviour, manunitro
+                        ! is treated purely as mineral fertiliser N
+                        fert(p) = (manureN_tot + fertnitro(p)) / fert_counter(p)
+                     end if
                   else
                      fert(p) = 0._r8
                   end if
-                  ! tboas: apply manure C in single timestep at onset
-                  ! Controlled by manure_freq_years (every N years) and
-                  ! manure_apply_month (0=at planting, >0=fixed calendar date)
+
+                  ! tboas: apply manure C in a single timestep at onset
                   fertC(p) = 0._r8
-                  if (use_cfert .and. ndays_on > 0._r8) then
-                     ! Check application frequency: apply only every manure_freq_years
-                     ! Use kyr modulo so year 2009->1, 2010->2 etc; fires when remainder=1
-                     if (manure_freq_years <= 1 .or. &
-                         mod(kyr, manure_freq_years) == 1) then
-                        ! Check timing: if manure_apply_month=0 apply at planting onset
-                        ! if manure_apply_month>0 only apply on that calendar date
-                        if (manure_apply_month == 0 .or. &
-                            (kmo == manure_apply_month .and. kda == manure_apply_day)) then
-                           manureC  = manunitro(ivt(p)) * 1000._r8 * manure_CN_ratio
-                           fertC(p) = manureC / dtrad  ! tboas: full amount in one timestep
-                        end if
-                     end if
+                  fertN(p) = 0._r8
+                  if (apply_manure) then
+                     ! tboas-fix: the organic N and the carbon that carries it are
+                     ! emitted as a matched pair, so the litter pools receive manure
+                     ! at exactly manure_CN_ratio and no nitrogen is counted twice.
+                     manureC  = manureN_tot * (1._r8 - manure_nh4_frac) * manure_CN_ratio
+                     fertC(p) = manureC / dtrad  ! full amount in one timestep
+                     fertN(p) = manureN_tot * (1._r8 - manure_nh4_frac) / dtrad
                   end if
                else
                   ! this ensures no re-entry to onset of phase2
@@ -2807,7 +2852,9 @@ contains
                   ! Winter crops are handled by Oct 1 switch
                endif
                if (tlai(p) > 0._r8) then ! plant had emerged before harvest
-                  write (iulog,*)  'plant emerged'
+                  if (debug_covercrop) then   ! tboas-fix
+                     write (iulog,*)  'plant emerged'
+                  end if
                   offset_flag(p) = 1._r8
                   offset_counter(p) = dt
                else                      ! plant never emerged from the ground
@@ -3346,7 +3393,9 @@ contains
            accfsurv(p) = 1._r8
            countfsurv(p) = 1._r8
            wdd(p) =0._r8
-           write (iulog,*)  'subroutine coldtolerance ending'
+           if (debug_covercrop) then   ! tboas-fix
+              write (iulog,*)  'subroutine coldtolerance ending'
+           end if
        end if
 
     end associate

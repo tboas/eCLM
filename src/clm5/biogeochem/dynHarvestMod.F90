@@ -22,6 +22,7 @@ module dynHarvestMod
   use pftconMod               , only : pftcon, ncovercrop_1, ncovercrop_2, npcropmin, nwwheat, nirrig_wwheat, nwbarley, nirrig_wbarley
   use clm_varcon              , only : grlnd
   use clm_varctl              , only : use_covercropping, use_grainproduct, iulog
+  use clm_varctl              , only : debug_covercrop  ! tboas-fix
   use clm_time_manager        , only : get_curr_date, get_step_size  ! tboas
   use dynCovercropFileMod     , only : covercrop_switch_ivt  ! tboas
   use ColumnType              , only : col                
@@ -282,8 +283,10 @@ contains
        target_ivt = covercrop_target_ivt(p, use_next=.false.)
        if (target_ivt > 0 .and. target_ivt /= patch%itype(p) .and. &
             crop_inst%croplive_patch(p)) then
-          write(iulog,*) 'CCROT: Mar31 terminate covercrop p=',p, &
-               ' itype=',patch%itype(p),' target=',target_ivt
+          if (debug_covercrop) then
+             write(iulog,*) 'CCROT: Mar31 terminate covercrop p=',p, &
+                  ' itype=',patch%itype(p),' target=',target_ivt
+          end if
           cnveg_state_inst%gddmaturity_patch(p) = 0._r8
           cnveg_state_inst%huigrain_patch(p)    = 0._r8
        end if
@@ -294,8 +297,10 @@ contains
     if (curr_mon == 4 .and. curr_day == 1) then
        target_ivt = covercrop_target_ivt(p, use_next=.false.)
        if (target_ivt > 0 .and. target_ivt /= patch%itype(p)) then
-          write(iulog,*) 'CCROT: Apr1 switch p=',p, &
-               ' itype=',patch%itype(p),' target=',target_ivt
+          if (debug_covercrop) then
+             write(iulog,*) 'CCROT: Apr1 switch p=',p, &
+                  ' itype=',patch%itype(p),' target=',target_ivt
+          end if
           call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
                cnveg_carbonstate_inst, use_next=.false.)
        end if
@@ -315,8 +320,10 @@ contains
         (curr_mon == 10 .and. curr_day == 20)) then
 
        if (crop_inst%croplive_patch(p)) then
-          write(iulog,*) 'CCROT: cover-crop sowing skipped, crop live p=',p, &
-               ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
+          if (debug_covercrop) then
+             write(iulog,*) 'CCROT: cover-crop sowing skipped, crop live p=',p, &
+                  ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
+          end if
           return
        end if
 
@@ -327,10 +334,12 @@ contains
        mmdd = curr_mon * 100 + curr_day
        if (mmdd < pftcon%mnNHplantdate(target_ivt) .or. &
            mmdd > pftcon%mxNHplantdate(target_ivt)) then
-          write(iulog,*) 'CCROT: cover-crop sowing outside its window p=',p, &
-               ' mmdd=',mmdd,' target=',target_ivt, &
-               ' window=',pftcon%mnNHplantdate(target_ivt), &
-               pftcon%mxNHplantdate(target_ivt)
+          if (debug_covercrop) then
+             write(iulog,*) 'CCROT: cover-crop sowing outside its window p=',p, &
+                  ' mmdd=',mmdd,' target=',target_ivt, &
+                  ' window=',pftcon%mnNHplantdate(target_ivt), &
+                  pftcon%mxNHplantdate(target_ivt)
+          end if
           return
        end if
 
@@ -340,16 +349,20 @@ contains
           next_ivt = covercrop_target_ivt(p, use_next=.true.)
           if (next_ivt > 0) then
              if (pftcon%mnNHplantdate(next_ivt) > 700) then
-                write(iulog,*) 'CCROT: late cover crop suppressed, autumn-sown ', &
-                     'main crop follows p=',p,' next=',next_ivt
+                if (debug_covercrop) then
+                   write(iulog,*) 'CCROT: late cover crop suppressed, autumn-sown ', &
+                        'main crop follows p=',p,' next=',next_ivt
+                end if
                 return
              end if
           end if
        end if
 
        if (target_ivt /= patch%itype(p)) then
-          write(iulog,*) 'CCROT: sow cover crop p=',p,' mon=',curr_mon, &
-               ' day=',curr_day,' itype=',patch%itype(p),' target=',target_ivt
+          if (debug_covercrop) then
+             write(iulog,*) 'CCROT: sow cover crop p=',p,' mon=',curr_mon, &
+                  ' day=',curr_day,' itype=',patch%itype(p),' target=',target_ivt
+          end if
           call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
                cnveg_carbonstate_inst, use_next=.false., use_winter=.true.)
        end if
@@ -365,8 +378,10 @@ contains
        if (target_ivt <= 0) return
        if (pftcon%mnNHplantdate(target_ivt) > 700) then
           if (crop_inst%croplive_patch(p) .and. target_ivt /= patch%itype(p)) then
-             write(iulog,*) 'CCROT: Oct15 clear cover crop ahead of winter crop p=',p, &
-                  ' itype=',patch%itype(p),' target=',target_ivt
+             if (debug_covercrop) then
+                write(iulog,*) 'CCROT: Oct15 clear cover crop ahead of winter crop p=',p, &
+                     ' itype=',patch%itype(p),' target=',target_ivt
+             end if
              cnveg_state_inst%gddmaturity_patch(p) = 0._r8
              cnveg_state_inst%huigrain_patch(p)    = 0._r8
           end if
@@ -378,8 +393,10 @@ contains
     if ((curr_mon == 11 .and. curr_day ==  1) .or. &
         (curr_mon == 11 .and. curr_day == 15)) then
        if (crop_inst%croplive_patch(p)) then
-          write(iulog,*) 'CCROT: autumn sow skipped, crop live p=',p, &
-               ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
+          if (debug_covercrop) then
+             write(iulog,*) 'CCROT: autumn sow skipped, crop live p=',p, &
+                  ' mon=',curr_mon,' day=',curr_day,' itype=',patch%itype(p)
+          end if
           return
        end if
        target_ivt = covercrop_target_ivt(p, use_next=.true.)
@@ -388,10 +405,12 @@ contains
        ! to the 1 April branch and the patch overwinters bare
        if (pftcon%mnNHplantdate(target_ivt) > 700) then
           if (target_ivt /= patch%itype(p)) then
-             write(iulog,*) 'CCROT: autumn sow p=',p,' mon=',curr_mon, &
-                  ' day=',curr_day,' itype=',patch%itype(p), &
-                  ' target=',target_ivt, &
-                  ' mnNHplantdate=',pftcon%mnNHplantdate(target_ivt)
+             if (debug_covercrop) then
+                write(iulog,*) 'CCROT: autumn sow p=',p,' mon=',curr_mon, &
+                     ' day=',curr_day,' itype=',patch%itype(p), &
+                     ' target=',target_ivt, &
+                     ' mnNHplantdate=',pftcon%mnNHplantdate(target_ivt)
+             end if
              call covercrop_switch_ivt(p, crop_inst, cnveg_state_inst, &
                   cnveg_carbonstate_inst, use_next=.true.)
           end if

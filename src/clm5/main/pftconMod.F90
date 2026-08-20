@@ -1367,12 +1367,16 @@ contains
     ! Set is_pft_known_to_model based on mergetoclmpft
     !
     ! !USES:
+    use shr_log_mod , only : errMsg => shr_log_errMsg   ! tboas-fix
+    use spmdMod     , only : masterproc                 ! tboas-fix
     !
     ! !ARGUMENTS:
     class(pftcon_type), intent(inout) :: this
     !
     ! !LOCAL VARIABLES:
     integer :: m, merge_type
+    integer :: extra_known_pft(10)   ! tboas-fix: PFTs marked known by name, not by literal index
+    character(len=512) :: msg        ! tboas-fix
 
     character(len=*), parameter :: subname = 'set_is_pft_known_to_model'
     !-----------------------------------------------------------------------
@@ -1383,16 +1387,55 @@ contains
     ! so we can't handle it in the general loop below. But CLM always uses type 0, so
     ! handle it specially here.
     this%is_pft_known_to_model(0) = .true.
-    this%is_pft_known_to_model(27) = .true.
-    this%is_pft_known_to_model(28) = .true.
-    this%is_pft_known_to_model(55) = .true.
-    this%is_pft_known_to_model(56) = .true.
-    this%is_pft_known_to_model(59) = .true.
-    this%is_pft_known_to_model(60) = .true.
-    this%is_pft_known_to_model(65) = .true.
-    this%is_pft_known_to_model(66) = .true.
-    this%is_pft_known_to_model(78) = .true.
-    this%is_pft_known_to_model(79) = .true.
+
+    !--------------------------------------------------------------------------
+    ! tboas-fix: the crops added by this fork have no usable mergetoclmpft entry
+    ! in the parameter file, so they must be marked known explicitly. This used
+    ! to be a list of literal indices:
+    !     27, 28, 55, 56, 59, 60, 65, 66, 78, 79
+    ! which had two problems.
+    !
+    ! 1. mxpft = 78 and is_pft_known_to_model is allocated (0:mxpft), so
+    !    element 79 was an OUT-OF-BOUNDS WRITE. A DEBUG build with -fcheck=bounds
+    !    traps it; a RELEASE build silently corrupts whatever follows the array.
+    ! 2. Per expected_pftnames in InitRead, covercrop_1/covercrop_2 sit at 77/78,
+    !    not 78/79, so the intended cover-crop pair was off by one: index 78 was
+    !    covercrop_2 and covercrop_1 at 77 was never marked at all.
+    !
+    ! The indices are now resolved by name through the same n<crop> variables that
+    ! InitRead fills, which is the idiom already used elsewhere in this module
+    ! (see 'apple' and 'covercrop_1'). This keeps working when the parameter file
+    ! ordering changes -- e.g. the 81-PFT covercrop_paramfile versus the standard
+    ! file -- instead of silently marking the wrong slots.
+    !
+    ! Names, from expected_pftnames: winter_barley, irrigated_winter_barley,
+    ! potatoes, irrigated_potatoes, rapeseed, irrigated_rapeseed, sugarbeet,
+    ! irrigated_sugarbeet, covercrop_1, covercrop_2.
+    !--------------------------------------------------------------------------
+    extra_known_pft = (/ nwbarley,  nirrig_wbarley,   &
+                         npotatoes, nirrig_potatoes,  &
+                         nrapeseed, nirrig_rapeseed,  &
+                         nsugarbeet, nirrig_sugarbeet, &
+                         ncovercrop_1, ncovercrop_2 /)
+
+    do m = 1, size(extra_known_pft)
+       ! index 0 means the name was not found in this parameter file (the
+       ! cover-crop PFTs only exist when use_covercropping = .true.)
+       if (extra_known_pft(m) <= 0) cycle
+       ! every entry above is a prognostic crop; anything else means the name
+       ! lookup in InitRead did not run or the parameter file is inconsistent
+       if (extra_known_pft(m) > mxpft .or. extra_known_pft(m) < npcropmin) then
+          write(msg,'(a,i0,a,i0,a,i0,a)') trim(subname)//': resolved PFT index ', &
+               extra_known_pft(m), ' is outside the crop range [', npcropmin, &
+               ',', mxpft, ']. The parameter file does not match this build.'
+          call endrun(msg=trim(msg)//errMsg(sourcefile, __LINE__))
+       end if
+       this%is_pft_known_to_model(extra_known_pft(m)) = .true.
+       if (masterproc) then
+          write(iulog,*) trim(subname)//': marking PFT known to model: index ', &
+               extra_known_pft(m), ' name ', trim(pftname(extra_known_pft(m)))
+       end if
+    end do
 
     ! NOTE(wjs, 2015-10-04) Currently, mergetoclmpft is only used for crop types.
     ! However, we handle it more generally here (treating ALL pft types), in case its use

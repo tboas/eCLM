@@ -26,6 +26,7 @@ module dynCovercropFileMod
   use decompMod               , only : bounds_type, BOUNDS_LEVEL_PROC
   use dynFileMod              , only : dyn_file_type
   use clm_varctl              , only : iulog, use_covercropping, transient_landuse_file
+  use clm_varctl              , only : debug_covercrop  ! tboas-fix
   use pftconMod               , only : nwwheat, nirrig_wwheat, nwbarley, nirrig_wbarley, ncovercrop_1, ncovercrop_2  ! tboas
   use CNVegCarbonStateType    , only : cnveg_carbonstate_type  ! tboas
   use CNVegNitrogenStateType  , only : cnveg_nitrogenstate_type  ! tboas
@@ -198,7 +199,9 @@ contains
     if (.not. allocated(pct_cft_cur)) return
     new_ivt = covercrop_target_ivt(p, use_next, use_winter)
     if (new_ivt <= 0) return
-    write(iulog,*) 'SWITCH_DEBUG: new_ivt=',new_ivt,' patch%itype=',patch%itype(p),' use_next=',use_next  ! tboas
+    if (debug_covercrop) then
+       write(iulog,*) 'SWITCH_DEBUG: new_ivt=',new_ivt,' patch%itype=',patch%itype(p),' use_next=',use_next  ! tboas
+    end if
     if (new_ivt == patch%itype(p)) return
     ! tboas: no crop-type restriction — any crop can be switched to post-harvest
     patch%itype(p)                       = new_ivt
@@ -221,9 +224,19 @@ contains
     ! new crop out of phase 2 (no leaf emergence, no onset, leafc_xfer never drains).
     cnveg_state_inst%peaklai_patch(p)        = 0
     ! onset/offset flags NOT reset — onset_counter must go negative for crop onset to fire --- tboas
-    ! Zero xsmrpool to prevent carbon debt from previous crop --- tboas
+    ! Clear the previous crop's excess-maintenance-respiration pool --- tboas
+    ! tboas-fix: xsmrpool is part of totc_patch, so assigning 0 here destroyed
+    ! (or, for a negative pool, created) carbon with no matching flux, which is
+    ! what forced the CNBalanceCheckMod tolerance up to 100 gC/m2/timestep.
+    ! Move it into xsmrpool_loss instead: that pool is also inside totc_patch, so
+    ! the transfer conserves carbon, and CNCStateUpdate1Mod releases it to the
+    ! atmosphere through xsmrpool_to_atm, which the C balance already counts as
+    ! an output.
+    cnveg_carbonstate_inst%xsmrpool_loss_patch(p) = &
+         cnveg_carbonstate_inst%xsmrpool_loss_patch(p) + &
+         cnveg_carbonstate_inst%xsmrpool_patch(p)
     cnveg_carbonstate_inst%xsmrpool_patch(p) = 0._r8
-    ! tboas: C/N pools kept from previous crop; C balance tolerance relaxed in CNBalanceCheckMod
+    ! tboas: remaining C/N pools are kept from the previous crop
     ! tboas: use_grainproduct is a namelist flag and is NOT rewritten here.
     ! Mutating it made the last patch switched determine the setting for the
     ! whole domain. Grain-product suppression for cover crops is now decided

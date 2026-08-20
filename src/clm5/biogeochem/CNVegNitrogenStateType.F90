@@ -749,6 +749,9 @@ contains
           do i = bounds%begp,bounds%endp
              this%deadstemn_patch(i) = this%deadstemn_patch(i) * 10._r8
              this%deadcrootn_patch(i) = this%deadcrootn_patch(i) * 10._r8
+             ! tboas-fix: keep the perennial reference pool on the same scale as
+             ! deadstemn, as is done for deadstemc_soy in CNVegCarbonStateType
+             this%deadstemn_soy_patch(i) = this%deadstemn_soy_patch(i) * 10._r8
           end do
        else if (spinup_state == 2 .and. restart_file_spinup_state <= 1 ) then
           if ( masterproc ) write(iulog,*) ' CNRest: taking Dead wood N pools into AD spinup mode'
@@ -757,6 +760,8 @@ contains
           do i = bounds%begp,bounds%endp
              this%deadstemn_patch(i) = this%deadstemn_patch(i) / 10._r8
              this%deadcrootn_patch(i) = this%deadcrootn_patch(i) / 10._r8
+             ! tboas-fix: keep the perennial reference pool on the same scale
+             this%deadstemn_soy_patch(i) = this%deadstemn_soy_patch(i) / 10._r8
           end do
        endif
 

@@ -233,7 +233,8 @@ contains
   end subroutine CNNFert
 
   !-----------------------------------------------------------------------
-  subroutine CNCSoilFert(bounds, num_soilc, filter_soilc, cnveg_carbonflux_inst)
+  subroutine CNCSoilFert(bounds, num_soilc, filter_soilc, cnveg_carbonflux_inst, &
+       cnveg_nitrogenflux_inst)
     !
     ! !DESCRIPTION: tboas
     ! Route patch-level organic C fertilizer (fertC_patch) from manure application
@@ -250,37 +251,51 @@ contains
     integer                      , intent(in)    :: num_soilc
     integer                      , intent(in)    :: filter_soilc(:)
     type(cnveg_carbonflux_type)  , intent(inout) :: cnveg_carbonflux_inst
+    type(cnveg_nitrogenflux_type), intent(inout) :: cnveg_nitrogenflux_inst  ! tboas-fix
     !
     ! LOCAL VARIABLES
     integer  :: fc, c, pi, p
     real(r8) :: fertC_col   ! column-level sum of fertC_patch (area-weighted, gC/m2/s)
+    real(r8) :: fertN_col   ! tboas-fix: organic manure N accompanying fertC_col (gN/m2/s)
     !-----------------------------------------------------------------------
 
     if (.not. use_cfert .or. .not. use_crop) return
 
     associate( &
          fertC_patch               => cnveg_carbonflux_inst%fertC_patch                    , & ! Input:  patch-level organic C fert flux (gC/m2/s)
+         fertN_patch               => cnveg_nitrogenflux_inst%fertN_patch                  , & ! Input:  patch-level organic N fert flux (gN/m2/s)  tboas-fix
          wtcol                     => patch%wtcol                                           , & ! Input:  patch weight on column
          phenology_c_to_litr_met_c => cnveg_carbonflux_inst%phenology_c_to_litr_met_c_col  , & ! Output: litter metabolic pool (gC/m3/s)
          phenology_c_to_litr_cel_c => cnveg_carbonflux_inst%phenology_c_to_litr_cel_c_col  , & ! Output: litter cellulose pool (gC/m3/s)
-         phenology_c_to_litr_lig_c => cnveg_carbonflux_inst%phenology_c_to_litr_lig_c_col  & ! Output: litter lignin pool (gC/m3/s)
+         phenology_c_to_litr_lig_c => cnveg_carbonflux_inst%phenology_c_to_litr_lig_c_col  , & ! Output: litter lignin pool (gC/m3/s)
+         ! tboas-fix: the manure N that travels with the manure C
+         phenology_n_to_litr_met_n => cnveg_nitrogenflux_inst%phenology_n_to_litr_met_n_col , & ! Output: litter metabolic pool (gN/m3/s)
+         phenology_n_to_litr_cel_n => cnveg_nitrogenflux_inst%phenology_n_to_litr_cel_n_col , & ! Output: litter cellulose pool (gN/m3/s)
+         phenology_n_to_litr_lig_n => cnveg_nitrogenflux_inst%phenology_n_to_litr_lig_n_col   & ! Output: litter lignin pool (gN/m3/s)
          )
 
       do fc = 1, num_soilc
          c = filter_soilc(fc)
          fertC_col = 0.0_r8
+         fertN_col = 0.0_r8
 
-         ! Aggregate patch-level fertC to column (area-weighted)
+         ! Aggregate patch-level fertC/fertN to column (area-weighted)
          do pi = 1, col%npatches(c)
             p = col%patchi(c) + pi - 1
             if (patch%active(p)) then
                fertC_col = fertC_col + fertC_patch(p) * wtcol(p)
+               fertN_col = fertN_col + fertN_patch(p) * wtcol(p)  ! tboas-fix
             end if
          end do
 
          ! Route into surface litter pools (layer j=1), volumetric units gC/m3/s
          ! tboas: distribute manure C over layers down to manure_injection_depth
          ! If manure_injection_depth=0 (default), apply to surface layer only (j=1)
+         ! tboas-fix: the organic manure N travels with the manure C, so the litter
+         ! pools receive both at manure_CN_ratio and the N is mineralised by the
+         ! decomposition cascade rather than being injected into the mineral pool a
+         ! second time (which is what the pre-fix code effectively did).
+
          if (manure_injection_depth <= 0.0_r8) then
             phenology_c_to_litr_met_c(c,1) = phenology_c_to_litr_met_c(c,1) + &
                  fertC_col * manure_fmet / dzsoi_decomp(1)
@@ -288,6 +303,12 @@ contains
                  fertC_col * manure_fcel / dzsoi_decomp(1)
             phenology_c_to_litr_lig_c(c,1) = phenology_c_to_litr_lig_c(c,1) + &
                  fertC_col * manure_flig / dzsoi_decomp(1)
+            phenology_n_to_litr_met_n(c,1) = phenology_n_to_litr_met_n(c,1) + &
+                 fertN_col * manure_fmet / dzsoi_decomp(1)
+            phenology_n_to_litr_cel_n(c,1) = phenology_n_to_litr_cel_n(c,1) + &
+                 fertN_col * manure_fcel / dzsoi_decomp(1)
+            phenology_n_to_litr_lig_n(c,1) = phenology_n_to_litr_lig_n(c,1) + &
+                 fertN_col * manure_flig / dzsoi_decomp(1)
          else
             ! Distribute proportionally over layers within injection depth
             ! Weight by dzsoi_decomp so total flux integrates to fertC_col [gC/m2/s]
@@ -312,6 +333,12 @@ contains
                        fertC_col * manure_fcel * layer_wt / dzsoi_decomp(j)
                   phenology_c_to_litr_lig_c(c,j) = phenology_c_to_litr_lig_c(c,j) + &
                        fertC_col * manure_flig * layer_wt / dzsoi_decomp(j)
+                  phenology_n_to_litr_met_n(c,j) = phenology_n_to_litr_met_n(c,j) + &
+                       fertN_col * manure_fmet * layer_wt / dzsoi_decomp(j)
+                  phenology_n_to_litr_cel_n(c,j) = phenology_n_to_litr_cel_n(c,j) + &
+                       fertN_col * manure_fcel * layer_wt / dzsoi_decomp(j)
+                  phenology_n_to_litr_lig_n(c,j) = phenology_n_to_litr_lig_n(c,j) + &
+                       fertN_col * manure_flig * layer_wt / dzsoi_decomp(j)
                   depth_top = depth_top + dzsoi_decomp(j)
                end do
             end block

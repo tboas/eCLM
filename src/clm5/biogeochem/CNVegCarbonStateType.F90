@@ -1304,6 +1304,11 @@ contains
              do i = bounds%begp,bounds%endp
                 this%deadstemc_patch(i) = this%deadstemc_patch(i) * 10._r8
                 this%deadcrootc_patch(i) = this%deadcrootc_patch(i) * 10._r8
+                ! tboas-fix: the perennial reference pools are expressed on the
+                ! same scale as deadstemc and are compared against it in the
+                ! pruning/harvest calculation, so they must be rescaled too.
+                this%deadstemc_soy_patch(i) = this%deadstemc_soy_patch(i) * 10._r8
+                this%deadstemc_storage_soy_patch(i) = this%deadstemc_storage_soy_patch(i) * 10._r8
              end do
           else if (spinup_state == 2 .and. restart_file_spinup_state <= 1 )then
              if (spinup_state == 2 .and. restart_file_spinup_state <= 1 )then
@@ -1313,6 +1318,9 @@ contains
                 do i = bounds%begp,bounds%endp
                    this%deadstemc_patch(i) = this%deadstemc_patch(i) / 10._r8
                    this%deadcrootc_patch(i) = this%deadcrootc_patch(i) / 10._r8
+                   ! tboas-fix: keep the perennial reference pools on the same scale
+                   this%deadstemc_soy_patch(i) = this%deadstemc_soy_patch(i) / 10._r8
+                   this%deadstemc_storage_soy_patch(i) = this%deadstemc_storage_soy_patch(i) / 10._r8
                 end do
              end if
           end if
@@ -1412,12 +1420,18 @@ contains
                    !-----------------------------------------------
 
                    this%leafcmax_patch(i) = 0._r8
-                   
+
+                   ! tboas-fix: l must be set from the CURRENT patch before it is
+                   ! used. Previously the perennial test below read the landunit
+                   ! index left over from the previous loop iteration (undefined
+                   ! on the first), so the soy/fruit-tree reference pools were
+                   ! reset on the wrong patches.
+                   l = patch%landunit(i)
+
                    if (lun%itype(l) == istcrop .and. pftcon%perennial(patch%itype(i)) == 1._r8) then
                      this%deadstemc_soy_patch(i) = 0._r8
                      this%deadstemc_storage_soy_patch(i) = 0._r8
                    end if
-                   l = patch%landunit(i)
                    if (lun%itype(l) == istsoil  .or. patch%itype(i) == nc3crop .or. patch%itype(i) == nc3irrig) then!.or. &
 !                      (lun%itype(l) == istcrop .and. pftcon%perennial(patch%itype(i)) == 1._r8)) then ! (added by O.Dombrowski)
                       if ( present(num_reseed_patch) ) then

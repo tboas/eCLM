@@ -242,9 +242,32 @@ logical, public :: use_mexicocity       = .false.
 logical, public :: use_noio             = .false.
 logical, public :: use_nguardrail       = .false.
 
+! tboas-fix: compile-time switch for the per-patch crop-rotation / crop-phenology
+! debug writes. These fire once per patch, per MPI rank, with no masterproc guard;
+! at regional resolution that is O(10^5) log lines per rank on every rotation date
+! (and every timestep for the coldtolerance trace). Declared as a PARAMETER so the
+! compiler eliminates the write statements entirely when it is .false.
+! Set to .true. only for single-point debugging, then rebuild.
+logical, public, parameter :: debug_covercrop = .false.
+
+! tboas-fix: C and N mass-conservation error tolerances (gC or gN /m2/timestep).
+! These are the thresholds above which CNBalanceCheckMod aborts the run. The
+! defaults are the stock CLM5 values; they are exposed here only so that a
+! tolerance can be widened DELIBERATELY and visibly while debugging, instead of
+! being hardcoded loose in the source. A loosened value is logged at startup.
+real(r8), public :: cn_balance_tol_c     = 1.e-7_r8
+real(r8), public :: cn_balance_tol_n     = 1.e-7_r8
+
 ! tboas: namelist parameter for optional organic carbon fertilizer from manure
 logical, public :: use_cfert            = .false.
   real(r8), public :: manure_CN_ratio      = 25.0_r8  ! tboas: C:N ratio for farmyard manure (cfert_inparm)
+  ! tboas-fix: ammoniacal (immediately plant-available) fraction of the applied
+  ! manure N. The remainder enters the litter pools as organic N together with
+  ! the manure C at manure_CN_ratio, and is mineralised by the decomposition
+  ! cascade. 0.25 is typical for solid farmyard manure; ~0.5-0.6 for slurry.
+  ! Setting this to 1.0 reproduces the previous behaviour (all manure N applied
+  ! as mineral N) but then no organic N accompanies the manure C.
+  real(r8), public :: manure_nh4_frac      = 0.25_r8  ! tboas-fix: NH4-N fraction of manure N (cfert_inparm)
   real(r8), public :: manure_fmet          = 0.60_r8  ! tboas: metabolic litter fraction of manure C (cfert_inparm)
   real(r8), public :: manure_fcel          = 0.30_r8  ! tboas: cellulose litter fraction of manure C (cfert_inparm)
   real(r8), public :: manure_flig          = 0.10_r8  ! tboas: lignin litter fraction of manure C (cfert_inparm)

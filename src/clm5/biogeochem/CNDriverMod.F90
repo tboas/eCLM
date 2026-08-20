@@ -474,7 +474,8 @@ contains
     call t_stopf('CNPhenology')
     ! tboas: route manure organic C into litter pools AFTER CNPhenology to avoid overwrite
     if (use_cfert) then
-       call CNCSoilFert(bounds, num_soilc, filter_soilc, cnveg_carbonflux_inst)
+       call CNCSoilFert(bounds, num_soilc, filter_soilc, cnveg_carbonflux_inst, &
+            cnveg_nitrogenflux_inst)
     end if
 
     !--------------------------------------------
