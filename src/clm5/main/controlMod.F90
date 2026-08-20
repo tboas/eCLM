@@ -611,6 +611,11 @@ contains
     call mpi_bcast (covercrop_paramfile,    len(covercrop_paramfile),    MPI_CHARACTER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (transient_landuse_file, len(transient_landuse_file), MPI_CHARACTER, 0, mpicom, ier)  ! tboas
     call mpi_bcast (use_fertilizer, 1, MPI_LOGICAL, 0, mpicom, ier)
+    ! tboas-fix: this broadcast was lost. use_grainproduct is read on the master
+    ! rank only, so without it every other rank kept the .false. default and
+    ! routed harvested grain C and N to litter while rank 0 sent it to the crop
+    ! product pool -- rank- and decomposition-dependent results.
+    call mpi_bcast (use_grainproduct, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_cfert,       1, MPI_LOGICAL, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_CN_ratio,        1, MPI_REAL8, 0, mpicom, ier)  ! tboas
     call mpi_bcast (manure_fmet,            1, MPI_REAL8, 0, mpicom, ier)  ! tboas

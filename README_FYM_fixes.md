@@ -138,6 +138,24 @@ defaults apply when they are absent from `lnd_in`.
 harvested grain never leaves the domain and is eventually respired back, which
 biases cropland NEE/NBP.
 
+## 7. Calendar-date manure application
+
+`manure_apply_month > 0` never worked: the gate sat inside the leaf-emergence
+onset block, which fires on a single timestep once per season, so a fixed
+calendar date essentially never coincided with it and the manure was silently
+never applied. Only `manure_apply_month = 0` was functional.
+
+The date-driven case is now handled at the top of the crop patch loop, where it
+is reached every timestep, and the onset path is restricted to
+`manure_apply_month == 0` so the two cannot both fire. Only the organic C and N
+are date-driven; the ammoniacal fraction stays on the standard fertiliser
+schedule, metered from onset over `ndays_on`, since that is plant-available N.
+The `manure_freq_years` gate now applies to the ammoniacal N on both paths.
+
+Because the new block sits before the perennial branch, fruit-tree patches also
+receive manure for the first time -- `FruitTreePhenology` writes no `fertC` /
+`fertN` of its own, so with `manure_apply_month = 0` perennials still get none.
+
 ## Not addressed here
 
 * The single-timestep manure C pulse (`fertC = manureC / dtrad`) is kept, as

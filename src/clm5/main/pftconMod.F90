@@ -527,6 +527,7 @@ contains
     integer            :: dimid                ! netCDF dimension id
     integer            :: npft                 ! number of pfts on pft-physiology file
     logical            :: readv                ! read variable in or not
+    logical            :: readv_taper, readv_nstem ! tboas-fix: optional woody allometry params
     character(len=32)  :: subname = 'InitRead' ! subroutine name
     character(len=pftname_len) :: expected_pftnames(0:mxpft)
     character(len=512) :: msg
@@ -1007,51 +1008,6 @@ contains
        call ncd_io('prune_fr', this%prune_fr, 'read', ncid, readvar=readv)
        if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
    
-       call ncd_io('nstem', this%nstem, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('taper', this%taper, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('cc_leaf', this% cc_leaf, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('cc_lstem', this%cc_lstem, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('cc_dstem', this%cc_dstem, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('cc_other', this%cc_other, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_leaf', this% fm_leaf, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_lstem', this%fm_lstem, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_dstem', this%fm_dstem, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_other', this%fm_other, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_root', this% fm_root, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_lroot', this%fm_lroot, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fm_droot', this%fm_droot, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fsr_pft', this% fsr_pft, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
-       call ncd_io('fd_pft', this%  fd_pft, 'read', ncid, readvar=readv)
-       if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
-   
        call ncd_io('planting_temp', this%planttemp, 'read', ncid, readvar=readv)
        if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
    
@@ -1077,22 +1033,51 @@ contains
        if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
     else
        this%prune_fr(:)      = 0._r8
-       this%nstem(:)         = 0._r8
-       this%cc_leaf(:)       = 0._r8
-       this%fm_leaf(:)       = 0._r8
-       this%fm_root(:)       = 0._r8
-       this%fsr_pft(:)       = 0._r8
-       this%fd_pft(:)        = 0._r8
-       this%taper(:) = 0._r8
-       this%cc_lstem(:) = 0._r8
-       this%cc_dstem(:) = 0._r8
-       this%cc_other(:) = 0._r8
-       this%fm_lstem(:) = 0._r8
-       this%fm_dstem(:) = 0._r8
-       this%fm_other(:) = 0._r8
-       this%fm_lroot(:) = 0._r8
-       this%fm_droot(:) = 0._r8
     end if
+
+    !--------------------------------------------------------------------------
+    ! tboas-fix: fire behaviour and woody allometry are NOT fruit-tree features.
+    ! These parameters used to be read inside the use_fruittree block and zeroed
+    ! in its else branch, so with the default use_fruittree = .false. every
+    ! combustion completeness and fire mortality parameter was identically zero
+    ! (fire silently disabled), and taper = nstem = 0 made the woody height
+    ! allometry
+    !     htop = (3*deadstemc*taper^2 / (pi*nstem*dwood))^(1/3)
+    ! evaluate 0/0 for every tree and shrub. They are read unconditionally now,
+    ! as in the base model.
+    !--------------------------------------------------------------------------
+    call ncd_io('cc_leaf',  this%cc_leaf,  'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('cc_lstem', this%cc_lstem, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('cc_dstem', this%cc_dstem, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('cc_other', this%cc_other, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_leaf',  this%fm_leaf,  'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_lstem', this%fm_lstem, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_dstem', this%fm_dstem, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_other', this%fm_other, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_root',  this%fm_root,  'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_lroot', this%fm_lroot, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fm_droot', this%fm_droot, 'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fsr_pft',  this%fsr_pft,  'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+    call ncd_io('fd_pft',   this%fd_pft,   'read', ncid, readvar=readv)
+    if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
+
+    ! taper and nstem are optional: the fruit-tree parameter files supply them,
+    ! the standard CLM5 file does not. The fallback is applied further down,
+    ! once the shrub PFT indices have been resolved from pftname.
+    call ncd_io('taper', this%taper, 'read', ncid, readvar=readv_taper)
+    call ncd_io('nstem', this%nstem, 'read', ncid, readvar=readv_nstem)
     ! Read crop planting/harvest params for all crops (not fruittree-specific) --- tboas
     call ncd_io('planting_temp', this%planttemp, 'read', ncid, readvar=readv)
     if ( .not. readv ) call endrun(msg=' ERROR: error in reading in pft data'//errMsg(sourcefile, __LINE__))
@@ -1289,6 +1274,22 @@ contains
     npcropmin            = ntmp_corn            ! first prognostic crop
     npcropmax            = mxpft                ! last prognostic crop in list
 
+    ! tboas-fix: deferred fallback for the optional woody-allometry parameters.
+    ! Placed here because it needs nbrdlf_evr_shrub / nbrdlf_dcd_brl_shrub, which
+    ! are only resolved by the pftname loop above. Values are the ones the base
+    ! model hardwired: taper 200, shrubs 10, stocking 1000 stems per hectare.
+    if ( .not. readv_taper ) then
+       this%taper(:) = 200._r8
+       this%taper(nbrdlf_evr_shrub:nbrdlf_dcd_brl_shrub) = 10._r8
+       if (masterproc) write(iulog,*) trim(subname)// &
+            ': taper absent from the parameter file - using base-model values (200, shrubs 10)'
+    end if
+    if ( .not. readv_nstem ) then
+       this%nstem(:) = 0.1_r8
+       if (masterproc) write(iulog,*) trim(subname)// &
+            ': nstem absent from the parameter file - using base-model stocking (1000 ha-1)'
+    end if
+
     call this%set_is_pft_known_to_model()
     call this%set_num_cfts_known_to_model()
 
@@ -1375,7 +1376,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer :: m, merge_type
-    integer :: extra_known_pft(10)   ! tboas-fix: PFTs marked known by name, not by literal index
+    integer :: extra_known_pft(16)   ! tboas-fix: PFTs marked known by name, not by literal index
     character(len=512) :: msg        ! tboas-fix
 
     character(len=*), parameter :: subname = 'set_is_pft_known_to_model'
@@ -1408,13 +1409,17 @@ contains
     ! ordering changes -- e.g. the 81-PFT covercrop_paramfile versus the standard
     ! file -- instead of silently marking the wrong slots.
     !
-    ! Names, from expected_pftnames: winter_barley, irrigated_winter_barley,
-    ! potatoes, irrigated_potatoes, rapeseed, irrigated_rapeseed, sugarbeet,
-    ! irrigated_sugarbeet, covercrop_1, covercrop_2.
+    ! The list covers every CFT used in the German rotations: maize, spring
+    ! barley, winter barley, winter rye, potatoes, rapeseed, sugar beet (each
+    ! rainfed + irrigated) and the two cover crops. Extend it here when a new
+    ! CFT enters a rotation, using the n<crop> name-resolved index.
     !--------------------------------------------------------------------------
-    extra_known_pft = (/ nwbarley,  nirrig_wbarley,   &
-                         npotatoes, nirrig_potatoes,  &
-                         nrapeseed, nirrig_rapeseed,  &
+    extra_known_pft = (/ ntmp_corn,  nirrig_tmp_corn,  &   ! maize
+                         nbarley,    nirrig_barley,    &   ! spring barley
+                         nwbarley,   nirrig_wbarley,   &   ! winter barley
+                         nwrye,      nirrig_wrye,      &   ! winter rye
+                         npotatoes,  nirrig_potatoes,  &
+                         nrapeseed,  nirrig_rapeseed,  &
                          nsugarbeet, nirrig_sugarbeet, &
                          ncovercrop_1, ncovercrop_2 /)
 

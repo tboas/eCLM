@@ -2275,6 +2275,36 @@ contains
          g = patch%gridcell(p)
          h = inhemi(p)
 
+         !--------------------------------------------------------------------
+         ! tboas-fix: calendar-date manure application.
+         !
+         ! manure_apply_month = 0 keeps the original behaviour -- the organic C
+         ! and N are released at leaf-emergence onset, in the phase-2 block
+         ! further down. For manure_apply_month > 0 the release must NOT be tied
+         ! to that block: it fires on a single timestep once per season, so a
+         ! fixed calendar date would essentially never coincide with it and the
+         ! manure was silently never applied. That case is handled here instead,
+         ! which is reached on every timestep of every crop patch in the filter,
+         ! perennials included (FruitTreePhenology writes no fertC/fertN of its
+         ! own, so this is also the only manure path a fruit tree ever sees).
+         !
+         ! Only the organic C and N are date-driven. The ammoniacal fraction
+         ! stays on the standard fertiliser schedule, metered from onset over
+         ! ndays_on, because that is plant-available N and CLM5 meters all
+         ! mineral fertiliser that way.
+         !--------------------------------------------------------------------
+         if (use_cfert .and. manure_apply_month > 0) then
+            if (kmo == manure_apply_month .and. kda == manure_apply_day .and. &
+                mcsec == 0) then
+               if (manure_freq_years <= 1 .or. &
+                   mod(kyr, manure_freq_years) == 1) then
+                  manureN_tot = manunitro(ivt(p)) * 1000._r8
+                  fertN(p)    = manureN_tot * (1._r8 - manure_nh4_frac) / dtrad
+                  fertC(p)    = fertN(p) * manure_CN_ratio
+               end if
+            end if
+         end if
+
          if (perennial(ivt(p)) == 0._r8) then
                  ! background litterfall and transfer rates; long growing season factor
                  bglfr(p) = 0._r8 ! this value changes later in a crop's life cycle
@@ -2777,14 +2807,15 @@ contains
                   ! Use kyr modulo so year 2009->1, 2010->2 etc; fires when remainder=1.
                   ! Check timing: manure_apply_month=0 means apply at planting onset,
                   ! >0 means only on that calendar date.
+                  ! tboas-fix: only the "apply at planting onset" case is handled
+                  ! here. manure_apply_month > 0 is handled on its own calendar
+                  ! date at the top of the patch loop, so it must not also fire
+                  ! here or the manure would be applied twice.
                   apply_manure = .false.
-                  if (use_cfert .and. ndays_on > 0) then
+                  if (use_cfert .and. ndays_on > 0 .and. manure_apply_month == 0) then
                      if (manure_freq_years <= 1 .or. &
                          mod(kyr, manure_freq_years) == 1) then
-                        if (manure_apply_month == 0 .or. &
-                            (kmo == manure_apply_month .and. kda == manure_apply_day)) then
-                           apply_manure = .true.
-                        end if
+                        apply_manure = .true.
                      end if
                   end if
 
@@ -2797,12 +2828,12 @@ contains
                         ! ammoniacal fraction of the manure N is immediately
                         ! plant-available. The organic remainder travels with the
                         ! manure C into the litter pools (CNCSoilFert) and is
-                        ! mineralised by the decomposition cascade, so it must NOT
-                        ! also be added to the mineral pool here. Before this fix
-                        ! the full manure N was added as mineral N AND the same N
-                        ! was used a second time, x manure_CN_ratio, to size an
-                        ! N-free carbon pulse.
-                        if (apply_manure) then
+                        ! mineralised by the decomposition cascade, so it must not
+                        ! also be added to the mineral pool here.
+                        ! The ammoniacal N follows the same every-N-years gate as
+                        ! the carbon, whichever release date is in use.
+                        if (manure_freq_years <= 1 .or. &
+                            mod(kyr, manure_freq_years) == 1) then
                            fert(p) = (manureN_tot * manure_nh4_frac + fertnitro(p)) / fert_counter(p)
                         else
                            fert(p) = fertnitro(p) / fert_counter(p)
