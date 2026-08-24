@@ -377,7 +377,14 @@ contains
        target_ivt = covercrop_target_ivt(p, use_next=.true.)
        if (target_ivt <= 0) return
        if (pftcon%mnNHplantdate(target_ivt) > 700) then
-          if (crop_inst%croplive_patch(p) .and. target_ivt /= patch%itype(p)) then
+          ! tboas-fix: only force-terminate an ACTUAL cover crop here.
+          ! The unguarded condition fired whenever the standing crop
+          ! merely differed from next year's target -- e.g. a plain
+          ! wheat->rye rotation with no cover crop between them -- and
+          ! zeroed gddmaturity/huigrain on wheat mid-season, leaking
+          ! carbon that CNBalanceCheckMod does not account for.
+          if (crop_inst%croplive_patch(p) .and. target_ivt /= patch%itype(p) .and. &
+               (patch%itype(p) == ncovercrop_1 .or. patch%itype(p) == ncovercrop_2)) then
              if (debug_covercrop) then
                 write(iulog,*) 'CCROT: Oct15 clear cover crop ahead of winter crop p=',p, &
                      ' itype=',patch%itype(p),' target=',target_ivt
